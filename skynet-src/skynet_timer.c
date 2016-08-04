@@ -243,6 +243,7 @@ systime(uint32_t *sec, uint32_t *cs) {
 #endif
 }
 
+//返回从1970年1月1日到经历过多少个1/100秒
 static uint64_t
 gettime() {
 	uint64_t t;
@@ -254,7 +255,7 @@ gettime() {
 #else
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	t = (uint64_t)tv.tv_sec * 100;
+	t = (uint64_t)tv.tv_sec * 100;  //百分之一秒的精度
 	t += tv.tv_usec / 10000;
 #endif
 	return t;
@@ -291,6 +292,8 @@ void
 skynet_timer_init(void) {
 	TI = timer_create_timer();
 	uint32_t current = 0;
+
+	//执行完systime后TI->starttime单位为秒，current单位为1/100
 	systime(&TI->starttime, &current);
 	TI->current = current;
 	TI->current_point = gettime();
