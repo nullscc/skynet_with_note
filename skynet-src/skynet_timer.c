@@ -52,6 +52,7 @@ struct timer {
 
 static struct timer * TI = NULL;
 
+//清空链表
 static inline struct timer_node *
 link_clear(struct link_list *list) {
 	struct timer_node * ret = list->head.next;
@@ -114,12 +115,12 @@ move_list(struct timer *T, int level, int idx) {
 
 static void
 timer_shift(struct timer *T) {
-	int mask = TIME_NEAR;
+	int mask = TIME_NEAR; // 256
 	uint32_t ct = ++T->time;
 	if (ct == 0) {	//溢出了
 		move_list(T, 3, 0); //重新开始
 	} else {
-		uint32_t time = ct >> TIME_NEAR_SHIFT;
+		uint32_t time = ct >> TIME_NEAR_SHIFT; //8
 		int i=0;
 
 		while ((ct & (mask-1))==0) {
@@ -155,7 +156,7 @@ dispatch_list(struct timer_node *current) {
 
 static inline void
 timer_execute(struct timer *T) {
-	int idx = T->time & TIME_NEAR_MASK;
+	int idx = T->time & TIME_NEAR_MASK;		//0xff
 	
 	while (T->near[idx].head.next) {
 		struct timer_node *current = link_clear(&T->near[idx]);
