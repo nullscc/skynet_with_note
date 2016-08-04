@@ -116,8 +116,8 @@ static void
 timer_shift(struct timer *T) {
 	int mask = TIME_NEAR;
 	uint32_t ct = ++T->time;
-	if (ct == 0) {
-		move_list(T, 3, 0);
+	if (ct == 0) {	//溢出了
+		move_list(T, 3, 0); //重新开始
 	} else {
 		uint32_t time = ct >> TIME_NEAR_SHIFT;
 		int i=0;
