@@ -58,6 +58,7 @@ local fork_queue = {}
 -- suspend is function
 local suspend
 
+-- 参数为带冒号的16进制数字表示的字符串，返回地址
 local function string_to_handle(str)
 	return tonumber("0x" .. string.sub(str , 2))
 end
@@ -294,8 +295,9 @@ function skynet.self()
 	return self_handle
 end
 
+-- 返回一个带冒号的16进制地址
 function skynet.localname(name)
-	local addr = c.command("QUERY", name)
+	local addr = c.command("QUERY", name)	--返回一个带冒号的16进制的数字的字符串
 	if addr then
 		return string_to_handle(addr)
 	end
@@ -536,6 +538,7 @@ function skynet.queryservice(global, ...)
 	end
 end
 
+-- 返回地址的字符串形式,以冒号开头
 function skynet.address(addr)
 	if type(addr) == "number" then
 		return string.format(":%08x",addr)

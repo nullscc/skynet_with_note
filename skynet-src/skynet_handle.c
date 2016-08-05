@@ -17,16 +17,16 @@ struct handle_name {
 };
 
 struct handle_storage {
-	struct rwlock lock;
+	struct rwlock lock;		//读写锁
 
-	uint32_t harbor;
-	uint32_t handle_index;
-	int slot_size;
-	struct skynet_context ** slot;
+	uint32_t harbor;		//harbor id
+	uint32_t handle_index;	//总共有多少个服务
+	int slot_size;			//slot的个数，slot_size永远不会小于handle_index
+	struct skynet_context ** slot; //slot下挂着所有的服务相关的结构体struct skynet_context
 	
-	int name_cap;
-	int name_count;
-	struct handle_name *name;
+	int name_cap;		//存储全局名字的空间的总个数，永远大于name_count
+	int name_count;		//当前全局名字的个数
+	struct handle_name *name;	//用于管理服务的全局名字
 };
 
 static struct handle_storage *H = NULL;
@@ -42,7 +42,7 @@ skynet_handle_register(struct skynet_context *ctx) {
 		int i;
 		for (i=0;i<s->slot_size;i++) {
 			uint32_t handle = (i+s->handle_index) & HANDLE_MASK; //将高八位置为0
-			int hash = handle & (s->slot_size-1);
+			int hash = handle & (s->slot_size-1);	//从1开始到0终止，如果hash为0了，说明slot_size已经用尽了
 			if (s->slot[hash] == NULL) {
 				s->slot[hash] = ctx;
 				s->handle_index = handle + 1;
@@ -60,6 +60,7 @@ skynet_handle_register(struct skynet_context *ctx) {
 		memset(new_slot, 0, s->slot_size * 2 * sizeof(struct skynet_context *));
 		for (i=0;i<s->slot_size;i++) {
 			int hash = skynet_context_handle(s->slot[i]) & (s->slot_size * 2 - 1);
+			//复制时hash值为slot_size->1->(s->slot_size-1)，复制完以后hash为0处又为NULL了
 			assert(new_slot[hash] == NULL);
 			new_slot[hash] = s->slot[i];
 		}
@@ -69,6 +70,12 @@ skynet_handle_register(struct skynet_context *ctx) {
 	}
 }
 
+/***********************************
+ * 销毁某个服务，销毁一个服务包括:
+ * 1.销毁结构体:struct skynet_context的内存
+ * 2.将对应的s->slot[hash]置为空
+ * 3.将相应的s->name内存释放
+ ***********************************/
 int
 skynet_handle_retire(uint32_t handle) {
 	int ret = 0;
@@ -80,7 +87,7 @@ skynet_handle_retire(uint32_t handle) {
 	struct skynet_context * ctx = s->slot[hash];
 
 	if (ctx != NULL && skynet_context_handle(ctx) == handle) {
-		s->slot[hash] = NULL;
+		s->slot[hash] = NULL;	//释放相应的服务的指向
 		ret = 1;
 		int i;
 		int j=0, n=s->name_count;
@@ -89,7 +96,7 @@ skynet_handle_retire(uint32_t handle) {
 				skynet_free(s->name[i].name);
 				continue;
 			} else if (i!=j) {
-				s->name[j] = s->name[i];
+				s->name[j] = s->name[i]; //如果有删除的，就将整个数组前移，保证数组的连续性
 			}
 			++j;
 		}
@@ -108,6 +115,12 @@ skynet_handle_retire(uint32_t handle) {
 	return ret;
 }
 
+/***********************************************
+* 销毁所有的服务,步骤为:
+* 1.从s->slot中找到ctx
+* 2.由ctx找到handle(即地址)
+* 3.由handle调用skynet_handle_retire销毁这个服务
+***********************************************/
 void 
 skynet_handle_retireall() {
 	struct handle_storage *s = H;
@@ -132,6 +145,9 @@ skynet_handle_retireall() {
 	}
 }
 
+/***********************************************
+* 由服务地址得到服务结构体，并将ctx->ref原子性加1
+***********************************************/
 struct skynet_context * 
 skynet_handle_grab(uint32_t handle) {
 	struct handle_storage *s = H;
@@ -146,7 +162,7 @@ skynet_handle_grab(uint32_t handle) {
 	if (ctx && skynet_context_handle(ctx) == handle) {
 		result = ctx;
 
-		//ctx->ref+1
+		//ctx->ref+1，大概是给读写锁用的
 		skynet_context_grab(result);
 	}
 
@@ -155,6 +171,9 @@ skynet_handle_grab(uint32_t handle) {
 	return result;
 }
 
+/***********************************************
+* 折半查找全局名字对应的服务的地址
+***********************************************/
 uint32_t 
 skynet_handle_findname(const char * name) {
 	struct handle_storage *s = H;
@@ -184,27 +203,28 @@ skynet_handle_findname(const char * name) {
 
 	return handle;
 }
-
-//在某个之前将全局名字注册进去
+/***********************************************
+* 在某个名字之前将全局名字注册进去，所以全局名字是按顺序保存的，便于折半查找
+***********************************************/
 static void
 _insert_name_before(struct handle_storage *s, char *name, uint32_t handle, int before) {
-	if (s->name_count >= s->name_cap) {
+	if (s->name_count >= s->name_cap) { 	//如果全局名字空间不够用了，就成倍扩充
 		s->name_cap *= 2;
 		assert(s->name_cap <= MAX_SLOT_SIZE);
 		struct handle_name * n = skynet_malloc(s->name_cap * sizeof(struct handle_name));
 		int i;
-		for (i=0;i<before;i++) {
-			n[i] = s->name[i];
+		for (i=0;i<before;i++) { 	
+			n[i] = s->name[i];	//将before之前的老的复制到新的
 		}
 		for (i=before;i<s->name_count;i++) {
-			n[i+1] = s->name[i];
+			n[i+1] = s->name[i];	//before的位置留给要插入的name
 		}
-		skynet_free(s->name);
-		s->name = n;
+		skynet_free(s->name);	//释放老的
+		s->name = n;	//全局名字地址管理指向新分配的
 	} else {
 		int i;
 		for (i=s->name_count;i>before;i--) {
-			s->name[i] = s->name[i-1];
+			s->name[i] = s->name[i-1]; //将before之后的全局往后移，腾出空间给要插入的name
 		}
 	}
 	s->name[before].name = name;
@@ -212,7 +232,11 @@ _insert_name_before(struct handle_storage *s, char *name, uint32_t handle, int b
 	s->name_count ++;
 }
 
-//按顺序注册全局名字
+/***********************************************
+* 按顺序注册全局名字
+* 1.先折半查找出要插入的点
+* 2.再调用_insert_name_before将对应的name插入进去
+***********************************************/
 static const char *
 _insert_name(struct handle_storage *s, const char * name, uint32_t handle) {
 	int begin = 0;
@@ -237,6 +261,7 @@ _insert_name(struct handle_storage *s, const char * name, uint32_t handle) {
 	return result;
 }
 
+//注册全局名字
 const char * 
 skynet_handle_namehandle(uint32_t handle, const char *name) {
 	rwlock_wlock(&H->lock);
@@ -258,7 +283,7 @@ skynet_handle_init(int harbor) {
 
 	rwlock_init(&s->lock);
 	// reserve 0 for system
-	s->harbor = (uint32_t) (harbor & 0xff) << HANDLE_REMOTE_SHIFT;
+	s->harbor = (uint32_t) (harbor & 0xff) << HANDLE_REMOTE_SHIFT; //将harbor置为高8位的，这样能区分是哪里来的地址
 	s->handle_index = 1;
 	s->name_cap = 2;
 	s->name_count = 0;

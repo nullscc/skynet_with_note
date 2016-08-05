@@ -20,13 +20,15 @@ function skynet.abort()
 	c.command("ABORT")
 end
 
+-- 主要是看名字是不是以"."开头,如果不是"."开头，则注册一个整个skynet网络都有效的字符串地址
 local function globalname(name, handle)
 	local c = string.sub(name,1,1)
-	assert(c ~= ':')
+	assert(c ~= ':') --字符串地址不能是冒号开头
 	if c == '.' then
 		return false
 	end
 
+	-- 字符串地址长度不能超过16个字符
 	assert(#name <= 16)	-- GLOBALNAME_LENGTH is 16, defined in skynet_harbor.h
 	assert(tonumber(name) == nil)	-- global name can't be number
 
@@ -38,14 +40,14 @@ local function globalname(name, handle)
 end
 
 function skynet.register(name)
-	if not globalname(name) then
+	if not globalname(name) then --以"."开头都返回false
 		c.command("REG", name)
 	end
 end
 
 function skynet.name(name, handle)
-	if not globalname(name, handle) then
-		c.command("NAME", name .. " " .. skynet.address(handle))
+	if not globalname(name, handle) then --以"."开头都返回false
+		c.command("NAME", name .. " " .. skynet.address(handle)) -- 返回地址的字符串形式,以冒号开头
 	end
 end
 

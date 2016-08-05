@@ -18,6 +18,7 @@ skynet.start(function()
 		standalone = true
 		skynet.setenv("standalone", "true")
 
+		-- 如果是单节点模式，则slave服务为cdummy.lua
 		local ok, slave = pcall(skynet.newservice, "cdummy")
 		if not ok then
 			skynet.abort()
@@ -31,6 +32,7 @@ skynet.start(function()
 			end
 		end
 
+		-- 如果是单节点模式，则slave服务为cslave.lua
 		local ok, slave = pcall(skynet.newservice, "cslave")
 		if not ok then
 			skynet.abort()

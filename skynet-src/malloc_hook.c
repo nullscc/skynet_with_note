@@ -218,6 +218,7 @@ dump_c_mem() {
 	skynet_error(NULL, "+total: %zdkb",total >> 10);
 }
 
+//动态分配一个字符串并返回地址
 char *
 skynet_strdup(const char *str) {
 	size_t sz = strlen(str);

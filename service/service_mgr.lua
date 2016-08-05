@@ -184,14 +184,14 @@ skynet.start(function()
 			skynet.ret(skynet.pack(nil, r))
 		end
 	end)
-	local handle = skynet.localname ".service"
+	local handle = skynet.localname ".service" --返回"service"的数字地址
 	if  handle then
 		skynet.error(".service is already register by ", skynet.address(handle))
 		skynet.exit()
 	else
 		skynet.register(".service")
 	end
-	if skynet.getenv "standalone" then
+	if skynet.getenv "standalone" then --如果是主节点
 		skynet.register("SERVICE")
 		register_global()
 	else
