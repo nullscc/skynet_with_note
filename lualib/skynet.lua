@@ -417,7 +417,7 @@ end
 
 function skynet.dispatch(typename, func)
 	local p = proto[typename]
-	if func then
+	if func then  --lua类型的消息一般走这里
 		local ret = p.dispatch
 		p.dispatch = func
 		return ret
@@ -553,7 +553,7 @@ end
 
 skynet.error = c.error
 
------ register protocol
+----- register protocol 默认的三种类型
 do
 	local REG = skynet.register_protocol
 
