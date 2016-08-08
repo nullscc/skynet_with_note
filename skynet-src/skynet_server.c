@@ -238,6 +238,7 @@ skynet_context_release(struct skynet_context *ctx) {
 	return ctx;
 }
 
+//将消息压入到目的地址服务的消息队列中供work线程取出
 int
 skynet_context_push(uint32_t handle, struct skynet_message *message) {
 	struct skynet_context * ctx = skynet_handle_grab(handle);
@@ -705,20 +706,20 @@ skynet_send(struct skynet_context * context, uint32_t source, uint32_t destinati
 	if (destination == 0) {
 		return session;
 	}
-	if (skynet_harbor_message_isremote(destination)) {
+	if (skynet_harbor_message_isremote(destination)) { //如果目的地址不是本节点的
 		struct remote_message * rmsg = skynet_malloc(sizeof(*rmsg));
 		rmsg->destination.handle = destination;
 		rmsg->message = data;
 		rmsg->sz = sz;
 		skynet_harbor_send(rmsg, source, session);
-	} else {
+	} else {	//如果目的地址是本节点的
 		struct skynet_message smsg;
 		smsg.source = source;
 		smsg.session = session;
 		smsg.data = data;
 		smsg.sz = sz;
 
-		if (skynet_context_push(destination, &smsg)) {
+		if (skynet_context_push(destination, &smsg)) {	//将消息压入到目的地址服务的消息队列中供work线程取出
 			skynet_free(data);
 			return -1;
 		}
@@ -732,9 +733,9 @@ skynet_sendname(struct skynet_context * context, uint32_t source, const char * a
 		source = context->handle;
 	}
 	uint32_t des = 0;
-	if (addr[0] == ':') {
+	if (addr[0] == ':') {	//带冒号的16进制字符串地址
 		des = strtoul(addr+1, NULL, 16);
-	} else if (addr[0] == '.') {
+	} else if (addr[0] == '.') {	//本节点有效的字符串地址
 		des = skynet_handle_findname(addr + 1);
 		if (des == 0) {
 			if (type & PTYPE_TAG_DONTCOPY) {
@@ -742,7 +743,7 @@ skynet_sendname(struct skynet_context * context, uint32_t source, const char * a
 			}
 			return -1;
 		}
-	} else {
+	} else {	//整个skynet网络有效的字符串地址
 		_filter_args(context, type, &session, (void **)&data, &sz);
 
 		struct remote_message * rmsg = skynet_malloc(sizeof(*rmsg));

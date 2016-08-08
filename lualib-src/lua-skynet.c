@@ -47,7 +47,7 @@ _cb(struct skynet_context * context, void * ud, int type, int session, uint32_t 
 	lua_pushinteger(L, session);
 	lua_pushinteger(L, source);
 
-	r = lua_pcall(L, 5, 0 , trace);
+	r = lua_pcall(L, 5, 0 , trace);	//调用skynet.dispatch的第二个参数来处理别的服务发过来的消息
 
 	if (r == LUA_OK) {
 		return 0;
@@ -80,15 +80,22 @@ forward_cb(struct skynet_context * context, void * ud, int type, int session, ui
 	return 1;
 }
 
+//主要用来注册lua服务的消息处理函数
 static int
 lcallback(lua_State *L) {
 	struct skynet_context * context = lua_touserdata(L, lua_upvalueindex(1));
 	int forward = lua_toboolean(L, 2);
-	luaL_checktype(L,1,LUA_TFUNCTION);
-	lua_settop(L,1);
+	luaL_checktype(L,1,LUA_TFUNCTION);	//检查第1个参数是不是一个lua函数
+	lua_settop(L,1);	//将栈顶设置为lua函数
+
 	lua_rawsetp(L, LUA_REGISTRYINDEX, _cb);
+	//void lua_rawsetp (lua_State *L, int index, const void *p);
+	//等价于t[k] = v,这里的t是指给定索引处的表，k是指针p对应的轻量用户数据。而v是栈顶的值。
 
 	lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
+	//int lua_rawgeti (lua_State *L, int index, lua_Integer n);
+	//把 t[n] 的值压栈， 这里的 t 是指给定索引处的表。 这是一次直接访问；就是说，它不会触发元方法。
+
 	lua_State *gL = lua_tothread(L,-1);
 
 	if (forward) {
@@ -168,36 +175,37 @@ get_dest_string(lua_State *L, int index) {
  */
 static int
 lsend(lua_State *L) {
-	struct skynet_context * context = lua_touserdata(L, lua_upvalueindex(1));
-	uint32_t dest = (uint32_t)lua_tointeger(L, 1);
+	struct skynet_context * context = lua_touserdata(L, lua_upvalueindex(1)); //得到源服务的结构体
+	uint32_t dest = (uint32_t)lua_tointeger(L, 1);	//得到目标服务的地址，如果不是整数就返回0
 	const char * dest_string = NULL;
-	if (dest == 0) {
+	if (dest == 0) { 			//如果是字符串
 		if (lua_type(L,1) == LUA_TNUMBER) {
 			return luaL_error(L, "Invalid service address 0");
 		}
-		dest_string = get_dest_string(L, 1);
+		dest_string = get_dest_string(L, 1);	//得到字符串地址
 	}
 
-	int type = luaL_checkinteger(L, 2);
-	int session = 0;
+	int type = luaL_checkinteger(L, 2);	//得到消息类型
+	int session = 0;	//得到会话id
 	if (lua_isnil(L,3)) {
 		type |= PTYPE_TAG_ALLOCSESSION;
 	} else {
 		session = luaL_checkinteger(L,3);
 	}
 
-	int mtype = lua_type(L,4);
+	int mtype = lua_type(L,4);	//得到传递的参数类型
 	switch (mtype) {
-	case LUA_TSTRING: {
+	case LUA_TSTRING: { //如果参数类型是字符串
 		size_t len = 0;
-		void * msg = (void *)lua_tolstring(L,4,&len);
+		void * msg = (void *)lua_tolstring(L,4,&len);	//得到传递的消息的字符串
 		if (len == 0) {
 			msg = NULL;
 		}
-		if (dest_string) {
+		if (dest_string) {	//如果是字符串地址
+			//skynet_sendname最终还是会调用skynet_send
 			session = skynet_sendname(context, 0, dest_string, type, session , msg, len);
-		} else {
-			session = skynet_send(context, 0, dest, type, session , msg, len);
+		} else {	//如果是数字地址
+			session = skynet_send(context, 0, dest, type, session , msg, len);	
 		}
 		break;
 	}
@@ -376,7 +384,7 @@ luaopen_skynet_core(lua_State *L) {
 	luaL_newlibtable(L, l);
 
 	lua_getfield(L, LUA_REGISTRYINDEX, "skynet_context");
-	struct skynet_context *ctx = lua_touserdata(L,-1);
+	struct skynet_context *ctx = lua_touserdata(L,-1); //
 	if (ctx == NULL) {
 		return luaL_error(L, "Init skynet context first");
 	}
