@@ -4,8 +4,9 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+//一条服务的消息对应于一个此结构体
 struct skynet_message {
-	uint32_t source;
+	uint32_t source; //消息的源地址
 	int session;
 	void * data;
 	size_t sz;

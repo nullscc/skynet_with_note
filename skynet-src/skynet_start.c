@@ -160,7 +160,7 @@ thread_worker(void *p) {
 	skynet_initthread(THREAD_WORKER);
 	struct message_queue * q = NULL;
 	while (!m->quit) {
-		q = skynet_context_message_dispatch(sm, q, weight);
+		q = skynet_context_message_dispatch(sm, q, weight);	//每个服务都有一个权重
 		if (q == NULL) {
 			if (pthread_mutex_lock(&m->mutex) == 0) {
 				++ m->sleep;
@@ -206,7 +206,7 @@ start(int thread) {
 	create_thread(&pid[1], thread_timer, m);	//启动线程: thread_timer
 	create_thread(&pid[2], thread_socket, m);	//启动线程: thread_socket
 
-	static int weight[] = { 
+	static int weight[] = { //每个服务都有一个权重
 		-1, -1, -1, -1, 0, 0, 0, 0,
 		1, 1, 1, 1, 1, 1, 1, 1, 
 		2, 2, 2, 2, 2, 2, 2, 2, 

@@ -32,7 +32,7 @@ void
 skynet_monitor_trigger(struct skynet_monitor *sm, uint32_t source, uint32_t destination) {
 	sm->source = source;
 	sm->destination = destination;
-	ATOM_INC(&sm->version);
+	ATOM_INC(&sm->version);	//原子自增
 }
 
 //通过检查sm->version == sm->check_version，看是不是有服务在5s内一直在处理消息，如果是：则认为此服务已经陷入死循环，抛出警告

@@ -47,7 +47,7 @@ end
 
 function skynet.name(name, handle)
 	if not globalname(name, handle) then --以"."开头都返回false
-		c.command("NAME", name .. " " .. skynet.address(handle)) -- 返回地址的字符串形式,以冒号开头
+		c.command("NAME", name .. " " .. skynet.address(handle)) -- skynet.address返回地址的字符串形式,以冒号开头
 	end
 end
 

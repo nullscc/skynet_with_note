@@ -18,18 +18,19 @@
 #define MQ_IN_GLOBAL 1
 #define MQ_OVERLOAD 1024
 
+//每一个服务均对应一个此结构体
 struct message_queue {
-	struct spinlock lock;
-	uint32_t handle;
-	int cap;
-	int head;
-	int tail;
-	int release;
-	int in_global;
-	int overload;
-	int overload_threshold;
-	struct skynet_message *queue;
-	struct message_queue *next;
+	struct spinlock lock;			//自旋锁
+	uint32_t handle;				//服务的地址
+	int cap;						//此结构的消息容量
+	int head;						//索引头
+	int tail;						//索引尾
+	int release;					//释放标志，如果此标志被置为1，此结构体会被释放
+	int in_global;					//是否在全局消息队列中的flag
+	int overload;					//如果过载，非0(置为消息队列当前的消息长度)
+	int overload_threshold;			//过载阀值，超过此值说明过载了
+	struct skynet_message *queue;	//一条服务的消息对应一个struct skynet_message结构
+	struct message_queue *next;		//下一个服务的消息队列节点
 };
 
 struct global_queue {
@@ -40,7 +41,7 @@ struct global_queue {
 
 static struct global_queue *Q = NULL;
 
-//将服务的消息队列放入全局的消息队列的队列尾
+//将消息队列放入全局的消息队列的队列尾
 void 
 skynet_globalmq_push(struct message_queue * queue) {
 	struct global_queue *q= Q;
@@ -135,6 +136,7 @@ skynet_mq_overload(struct message_queue *q) {
 	return 0;
 }
 
+//从服务的消息队列头弹出一条skynet服务消息
 int
 skynet_mq_pop(struct message_queue *q, struct skynet_message *message) {
 	int ret = 1;
@@ -154,7 +156,7 @@ skynet_mq_pop(struct message_queue *q, struct skynet_message *message) {
 		if (length < 0) {
 			length += cap;
 		}
-		while (length > q->overload_threshold) {
+		while (length > q->overload_threshold) {	//如果过载，将目前消息队列的长度复制，并将过载阀值扩充一倍
 			q->overload = length;
 			q->overload_threshold *= 2;
 		}
@@ -172,6 +174,7 @@ skynet_mq_pop(struct message_queue *q, struct skynet_message *message) {
 	return ret;
 }
 
+//如果容量不够了，则成倍扩充
 static void
 expand_queue(struct message_queue *q) {
 	struct skynet_message *new_queue = skynet_malloc(sizeof(struct skynet_message) * q->cap * 2);
@@ -187,6 +190,7 @@ expand_queue(struct message_queue *q) {
 	q->queue = new_queue;
 }
 
+//将服务的某条消息压入服务的消息队列尾
 void 
 skynet_mq_push(struct message_queue *q, struct skynet_message *message) {
 	assert(message);
@@ -197,7 +201,7 @@ skynet_mq_push(struct message_queue *q, struct skynet_message *message) {
 		q->tail = 0;
 	}
 
-	if (q->head == q->tail) {
+	if (q->head == q->tail) { //如果容量不够了，则成倍扩充
 		expand_queue(q);
 	}
 
@@ -209,6 +213,7 @@ skynet_mq_push(struct message_queue *q, struct skynet_message *message) {
 	SPIN_UNLOCK(q)
 }
 
+//全局消息队列初始化
 void 
 skynet_mq_init() {
 	struct global_queue *q = skynet_malloc(sizeof(*q));

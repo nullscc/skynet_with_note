@@ -300,14 +300,14 @@ skynet_context_dispatchall(struct skynet_context * ctx) {
 struct message_queue * 
 skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue *q, int weight) {
 	if (q == NULL) {
-		q = skynet_globalmq_pop();
+		q = skynet_globalmq_pop();	//从全局的消息队列中弹出一个服务的消息队列
 		if (q==NULL)
 			return NULL;
 	}
 
-	uint32_t handle = skynet_mq_handle(q);
+	uint32_t handle = skynet_mq_handle(q);	//由全局的消息队列得到服务的地址
 
-	struct skynet_context * ctx = skynet_handle_grab(handle);
+	struct skynet_context * ctx = skynet_handle_grab(handle);	//由服务的地址得到服务的结构体
 	if (ctx == NULL) {
 		struct drop_t d = { handle };
 		skynet_mq_release(q, drop_message, &d);
@@ -318,14 +318,14 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 	struct skynet_message msg;
 
 	for (i=0;i<n;i++) {
-		if (skynet_mq_pop(q,&msg)) {
+		if (skynet_mq_pop(q,&msg)) { 	//从服务的消息队列中弹出一条服务消息
 			skynet_context_release(ctx);
 			return skynet_globalmq_pop();
-		} else if (i==0 && weight >= 0) {
+		} else if (i==0 && weight >= 0) {	//从服务的消息队列中取出消息成功
 			n = skynet_mq_length(q);
 			n >>= weight;
 		}
-		int overload = skynet_mq_overload(q);
+		int overload = skynet_mq_overload(q);	//消息长度超过过载阀值了
 		if (overload) {
 			skynet_error(ctx, "May overload, message queue length = %d", overload);
 		}
