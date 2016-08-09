@@ -86,11 +86,11 @@ struct socket {
 };
 
 struct socket_server {
-	int recvctrl_fd;
-	int sendctrl_fd;
+	int recvctrl_fd;	//管道的接收端
+	int sendctrl_fd;	//管道的发送端
 	int checkctrl;
-	poll_fd event_fd;
-	int alloc_id;
+	poll_fd event_fd;	//epoll描述符
+	int alloc_id;		
 	int event_n;
 	int event_index;
 	struct socket_object_interface soi;
@@ -98,7 +98,7 @@ struct socket_server {
 	struct socket slot[MAX_SOCKET];
 	char buffer[MAX_INFO];
 	uint8_t udpbuffer[MAX_UDP_PACKAGE];
-	fd_set rfds;
+	fd_set rfds;	//给select使用
 };
 
 struct request_open {
@@ -275,17 +275,17 @@ struct socket_server *
 socket_server_create() {
 	int i;
 	int fd[2];
-	poll_fd efd = sp_create();
-	if (sp_invalid(efd)) {
+	poll_fd efd = sp_create();	//生成epoll专用的描述符
+	if (sp_invalid(efd)) {	//efd为-1
 		fprintf(stderr, "socket-server: create event pool failed.\n");
 		return NULL;
 	}
-	if (pipe(fd)) {
+	if (pipe(fd)) {		//生成管道
 		sp_release(efd);
 		fprintf(stderr, "socket-server: create socket pair failed.\n");
 		return NULL;
 	}
-	if (sp_add(efd, fd[0], NULL)) {
+	if (sp_add(efd, fd[0], NULL)) {		//将管道的读段加入epoll事件
 		// add recvctrl_fd to event poll
 		fprintf(stderr, "socket-server: can't add server fd to event pool.\n");
 		close(fd[0]);
