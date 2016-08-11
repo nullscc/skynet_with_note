@@ -86,10 +86,10 @@ struct socket {
 };
 
 struct socket_server {
-	int recvctrl_fd;
-	int sendctrl_fd;
-	int checkctrl;
-	poll_fd event_fd;
+	int recvctrl_fd;						//管道的接收端，用作本地的网络命令请求(监听、绑定、发送消息等)
+	int sendctrl_fd;						//管道的发送端，用作本地的网络命令请求(监听、绑定、发送消息等)
+	int checkctrl;							//控制是否检测本地的网络请求命令
+	poll_fd event_fd;						//epoll专用描述符
 	int alloc_id;
 	int event_n;
 	int event_index;
@@ -280,12 +280,12 @@ socket_server_create() {
 		fprintf(stderr, "socket-server: create event pool failed.\n");
 		return NULL;
 	}
-	if (pipe(fd)) {
+	if (pipe(fd)) {		//创建一个管道，fd[1]为写入端，fd[0]为读取端
 		sp_release(efd);
 		fprintf(stderr, "socket-server: create socket pair failed.\n");
 		return NULL;
 	}
-	if (sp_add(efd, fd[0], NULL)) {
+	if (sp_add(efd, fd[0], NULL)) {		//将管道的读取端给epoll管理
 		// add recvctrl_fd to event poll
 		fprintf(stderr, "socket-server: can't add server fd to event pool.\n");
 		close(fd[0]);
@@ -295,13 +295,13 @@ socket_server_create() {
 	}
 
 	struct socket_server *ss = MALLOC(sizeof(*ss));
-	ss->event_fd = efd;
-	ss->recvctrl_fd = fd[0];
-	ss->sendctrl_fd = fd[1];
+	ss->event_fd = efd;			//epoll的文件描述符
+	ss->recvctrl_fd = fd[0];	//管道的读取端
+	ss->sendctrl_fd = fd[1];	//管道的写入端
 	ss->checkctrl = 1;
 
 	for (i=0;i<MAX_SOCKET;i++) {
-		struct socket *s = &ss->slot[i];
+		struct socket *s = &ss->slot[i];	//ss->slot[i]为一个struct socket
 		s->type = SOCKET_TYPE_INVALID;
 		clear_wb_list(&s->high);
 		clear_wb_list(&s->low);
@@ -884,6 +884,7 @@ block_readpipe(int pipefd, void *buffer, int sz) {
 	}
 }
 
+//判断管道的接收描述符是不是有请求过来
 static int
 has_cmd(struct socket_server *ss) {
 	struct timeval tv = {0,0};
@@ -942,7 +943,12 @@ set_udp_address(struct socket_server *ss, struct request_setudp *request, struct
 	return -1;
 }
 
-// return type
+/******************************************************************
+* 此函数涉及的只是状态的变化
+* 建立一个socket连接的过程是:'L'->'S'->客户端发过来一个包->'T'->'S'
+* 绑定在调用socket_server_listen时已经发生了
+* 发包给客户端:'D'
+******************************************************************/
 static int
 ctrl_cmd(struct socket_server *ss, struct socket_message *result) {
 	int fd = ss->recvctrl_fd;
@@ -955,7 +961,7 @@ ctrl_cmd(struct socket_server *ss, struct socket_message *result) {
 	block_readpipe(fd, buffer, len);
 	// ctrl command only exist in local fd, so don't worry about endian.
 	switch (type) {
-	case 'S':
+	case 'S':	//listen与accept后都会调用'S'
 		return start_socket(ss,(struct request_start *)buffer, result);
 	case 'B':
 		return bind_socket(ss,(struct request_bind *)buffer, result);
@@ -971,7 +977,7 @@ ctrl_cmd(struct socket_server *ss, struct socket_message *result) {
 		result->ud = 0;
 		result->data = NULL;
 		return SOCKET_EXIT;
-	case 'D':
+	case 'D':	//服务端向客户端发包
 		return send_socket(ss, (struct request_send *)buffer, result, PRIORITY_HIGH, NULL);
 	case 'P':
 		return send_socket(ss, (struct request_send *)buffer, result, PRIORITY_LOW, NULL);
@@ -1180,6 +1186,7 @@ report_accept(struct socket_server *ss, struct socket *s, struct socket_message 
 	return 1;
 }
 
+//清除已经关闭或发生错误的连接
 static inline void 
 clear_closed_event(struct socket_server *ss, struct socket_message * result, int type) {
 	if (type == SOCKET_CLOSE || type == SOCKET_ERROR) {
@@ -1202,9 +1209,9 @@ clear_closed_event(struct socket_server *ss, struct socket_message * result, int
 int 
 socket_server_poll(struct socket_server *ss, struct socket_message * result, int * more) {
 	for (;;) {
-		if (ss->checkctrl) {
-			if (has_cmd(ss)) {
-				int type = ctrl_cmd(ss, result);
+		if (ss->checkctrl) {	//控制是否去检查本地从管道写过来的请求
+			if (has_cmd(ss)) {	//判断管道的接收描述符是不是有请求过来
+				int type = ctrl_cmd(ss, result);	//如果有就得到请求的类型
 				if (type != -1) {
 					clear_closed_event(ss, result, type);
 					return type;
@@ -1214,9 +1221,9 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 				ss->checkctrl = 0;
 			}
 		}
-		if (ss->event_index == ss->event_n) {
-			ss->event_n = sp_wait(ss->event_fd, ss->ev, MAX_EVENT);
-			ss->checkctrl = 1;
+		if (ss->event_index == ss->event_n) { //如果event_index等于event_n，说明已经处理完了
+			ss->event_n = sp_wait(ss->event_fd, ss->ev, MAX_EVENT);		//等待有事情发生
+			ss->checkctrl = 1;	//检查本地的请求标志
 			if (more) {
 				*more = 0;
 			}
@@ -1235,9 +1242,9 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 		switch (s->type) {
 		case SOCKET_TYPE_CONNECTING:
 			return report_connect(ss, s, result);
-		case SOCKET_TYPE_LISTEN: {
+		case SOCKET_TYPE_LISTEN: {	//listen转accept
 			int ok = report_accept(ss, s, result);
-			if (ok > 0) {
+			if (ok > 0) {	//accept成功后会大于0
 				return SOCKET_ACCEPT;
 			} if (ok < 0 ) {
 				return SOCKET_ERROR;
@@ -1249,7 +1256,7 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 			fprintf(stderr, "socket-server: invalid socket\n");
 			break;
 		default:
-			if (e->read) {
+			if (e->read) {	//有数据可读,在sp_wait中进行设置
 				int type;
 				if (s->protocol == PROTOCOL_TCP) {
 					type = forward_message_tcp(ss, s, result);
@@ -1270,7 +1277,7 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 					break;				
 				return type;
 			}
-			if (e->write) {
+			if (e->write) {	//有数据可写,在sp_wait中进行设置,基本不会发生
 				int type = send_buffer(ss, s, result);
 				if (type == -1)
 					break;

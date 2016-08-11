@@ -6,9 +6,9 @@
 typedef int poll_fd;
 
 struct event {
-	void * s;
-	bool read;
-	bool write;
+	void * s;      //指向struct socket
+	bool read;     //此标志为true时，表示有数据可读  在sp_wait中置位
+	bool write;    //此标志为false时，表示有数据可读 在sp_wait中置位
 };
 
 static bool sp_invalid(poll_fd fd);
