@@ -91,14 +91,14 @@ struct socket_server {
 	int checkctrl;							//控制是否检测本地的网络请求命令
 	poll_fd event_fd;						//epoll专用描述符
 	int alloc_id;
-	int event_n;
+	int event_n;							
 	int event_index;
 	struct socket_object_interface soi;
 	struct event ev[MAX_EVENT];
 	struct socket slot[MAX_SOCKET];
 	char buffer[MAX_INFO];
 	uint8_t udpbuffer[MAX_UDP_PACKAGE];
-	fd_set rfds;	//给select使用
+	fd_set rfds;							//给select使用,主要用来检查是否有本地cmd从管道过来
 };
 
 struct request_open {
@@ -280,20 +280,12 @@ socket_server_create() {
 		fprintf(stderr, "socket-server: create event pool failed.\n");
 		return NULL;
 	}
-<<<<<<< HEAD
 	if (pipe(fd)) {		//创建一个管道，fd[1]为写入端，fd[0]为读取端
-=======
-	if (pipe(fd)) {		//生成管道
->>>>>>> bcae39e8739c4c83b16df96c79aebb2864730c32
 		sp_release(efd);
 		fprintf(stderr, "socket-server: create socket pair failed.\n");
 		return NULL;
 	}
-<<<<<<< HEAD
 	if (sp_add(efd, fd[0], NULL)) {		//将管道的读取端给epoll管理
-=======
-	if (sp_add(efd, fd[0], NULL)) {		//将管道的读段加入epoll事件
->>>>>>> bcae39e8739c4c83b16df96c79aebb2864730c32
 		// add recvctrl_fd to event poll
 		fprintf(stderr, "socket-server: can't add server fd to event pool.\n");
 		close(fd[0]);
