@@ -98,7 +98,7 @@ struct socket_server {
 	struct socket slot[MAX_SOCKET];
 	char buffer[MAX_INFO];
 	uint8_t udpbuffer[MAX_UDP_PACKAGE];
-	fd_set rfds;
+	fd_set rfds;	//给select使用
 };
 
 struct request_open {
@@ -275,17 +275,25 @@ struct socket_server *
 socket_server_create() {
 	int i;
 	int fd[2];
-	poll_fd efd = sp_create();
-	if (sp_invalid(efd)) {
+	poll_fd efd = sp_create();	//生成epoll专用的描述符
+	if (sp_invalid(efd)) {	//efd为-1
 		fprintf(stderr, "socket-server: create event pool failed.\n");
 		return NULL;
 	}
+<<<<<<< HEAD
 	if (pipe(fd)) {		//创建一个管道，fd[1]为写入端，fd[0]为读取端
+=======
+	if (pipe(fd)) {		//生成管道
+>>>>>>> bcae39e8739c4c83b16df96c79aebb2864730c32
 		sp_release(efd);
 		fprintf(stderr, "socket-server: create socket pair failed.\n");
 		return NULL;
 	}
+<<<<<<< HEAD
 	if (sp_add(efd, fd[0], NULL)) {		//将管道的读取端给epoll管理
+=======
+	if (sp_add(efd, fd[0], NULL)) {		//将管道的读段加入epoll事件
+>>>>>>> bcae39e8739c4c83b16df96c79aebb2864730c32
 		// add recvctrl_fd to event poll
 		fprintf(stderr, "socket-server: can't add server fd to event pool.\n");
 		close(fd[0]);
