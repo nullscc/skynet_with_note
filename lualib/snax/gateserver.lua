@@ -84,7 +84,7 @@ function gateserver.start(handler)
 			return
 		end
 		if nodelay then
-			socketdriver.nodelay(fd)
+			socketdriver.nodelay(fd)	--会向底层的管道发送一个"T"的消息
 		end
 		connection[fd] = true
 		client_number = client_number + 1

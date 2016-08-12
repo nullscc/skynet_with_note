@@ -91,11 +91,11 @@ struct socket_server {
 	int checkctrl;							//控制是否检测本地的网络请求命令
 	poll_fd event_fd;						//epoll专用描述符
 	int alloc_id;
-	int event_n;							
-	int event_index;
+	int event_n;							//表示有多少个描述符已经可读或者可写			
+	int event_index;						//表示处理到第几个描述符了
 	struct socket_object_interface soi;
-	struct event ev[MAX_EVENT];
-	struct socket slot[MAX_SOCKET];
+	struct event ev[MAX_EVENT];				//与描述符对应的事件(包括socket、read、write)
+	struct socket slot[MAX_SOCKET];			//与描述符对应的数据，用于标识自定义的数据
 	char buffer[MAX_INFO];
 	uint8_t udpbuffer[MAX_UDP_PACKAGE];
 	fd_set rfds;							//给select使用,主要用来检查是否有本地cmd从管道过来
@@ -285,7 +285,7 @@ socket_server_create() {
 		fprintf(stderr, "socket-server: create socket pair failed.\n");
 		return NULL;
 	}
-	if (sp_add(efd, fd[0], NULL)) {		//将管道的读取端给epoll管理
+	if (sp_add(efd, fd[0], NULL)) {		//将管道的读取端给epoll管理，skynet本地需要监听、绑定某个端口时都会从上层往管道的写端发送cmd
 		// add recvctrl_fd to event poll
 		fprintf(stderr, "socket-server: can't add server fd to event pool.\n");
 		close(fd[0]);
@@ -374,7 +374,7 @@ check_wb_list(struct wb_list *s) {
 }
 
 static struct socket *
-new_fd(struct socket_server *ss, int id, int fd, int protocol, uintptr_t opaque, bool add) {
+new_fd(struct socket_server *ss, int id, int fd, int protocol, uintptr_t opaque, bool add) {	//当有新的描述符需要加入时调用此函数
 	struct socket * s = &ss->slot[HASH_ID(id)];
 	assert(s->type == SOCKET_TYPE_RESERVE);
 
@@ -1242,7 +1242,7 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 		switch (s->type) {
 		case SOCKET_TYPE_CONNECTING:
 			return report_connect(ss, s, result);
-		case SOCKET_TYPE_LISTEN: {	//listen转accept
+		case SOCKET_TYPE_LISTEN: {	//listen完以后管道再接收一个"S"命令状态就变为SOCKET_TYPE_LISTEN了
 			int ok = report_accept(ss, s, result);
 			if (ok > 0) {	//accept成功后会大于0
 				return SOCKET_ACCEPT;
@@ -1277,7 +1277,7 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 					break;				
 				return type;
 			}
-			if (e->write) {	//有数据可写,在sp_wait中进行设置,基本不会发生
+			if (e->write) {	//有数据可写,在sp_wait中进行设置
 				int type = send_buffer(ss, s, result);
 				if (type == -1)
 					break;
