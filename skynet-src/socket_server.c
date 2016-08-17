@@ -857,6 +857,7 @@ start_socket(struct socket_server *ss, struct request_start *request, struct soc
 	return -1;
 }
 
+//状态没有变化，仅仅是设置nodelay
 static void
 setopt_socket(struct socket_server *ss, struct request_setopt *request) {
 	int id = request->id;
@@ -987,7 +988,7 @@ ctrl_cmd(struct socket_server *ss, struct socket_message *result) {
 	}
 	case 'C':
 		return set_udp_address(ss, (struct request_setudp *)buffer, result);
-	case 'T':
+	case 'T':	//状态没有变化，仅仅是设置nodelay
 		setopt_socket(ss, (struct request_setopt *)buffer);
 		return -1;
 	case 'U':

@@ -69,6 +69,14 @@ link(struct link_list *list,struct timer_node *node) {
 	node->next=0;
 }
 
+
+/***********************************
+x & 63的值在0到63循环
+x & 0xff的值在0到255循环
+((time|0xff)==(current_time|0xff)):的意义在于计算current_time是经过了n个0xff,如果time的值在n*0xff与(n+1)*0xff之间，则等式成立
+((time & 0xff)==0):的意义在于如果time是2^8的整数倍(当然：包括time=0),则等式成立
+***********************************/
+
 static void
 add_node(struct timer *T,struct timer_node *node) {
 	uint32_t time=node->expire;
