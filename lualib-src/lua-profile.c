@@ -86,8 +86,11 @@ lstop(lua_State *L) {
 		return luaL_error(L, "Call profile.start() before profile.stop()");
 	} 
 	double ti = diff_time(lua_tonumber(L, -1));
+
+	//以线程为键
 	lua_pushthread(L);
 	lua_rawget(L, lua_upvalueindex(2));
+
 	double total_time = lua_tonumber(L, -1);
 
 	lua_pushthread(L);
@@ -158,6 +161,7 @@ timing_yield(lua_State *L) {
 		double ti = lua_tonumber(L, -1);
 		lua_pop(L,1);
 
+		//以线程为键
 		lua_pushthread(L);
 		lua_rawget(L, lua_upvalueindex(1));
 		double starttime = lua_tonumber(L, -1);
@@ -207,40 +211,65 @@ luaopen_profile(lua_State *L) {
 		{ NULL, NULL },
 	};
 	luaL_newlibtable(L,l);
+
+	//创建一张空表
 	lua_newtable(L);	// table thread->start time
+
+	//创建一张空表
 	lua_newtable(L);	// table thread->total time
 
+	//创建一张空表
 	lua_newtable(L);	// weak table
+	//将"kv"压栈
 	lua_pushliteral(L, "kv");
+	//设置栈的倒数第2个元素的表的"__mode"字段为"kv",并将"kv"从栈上弹出，这样目前栈中只有两张空表，一张{__mode="kv"}
 	lua_setfield(L, -2, "__mode");
 
+	//将{__mode="kv"}复制一份,这样栈中有2张空表，2张{__mode="kv"}
 	lua_pushvalue(L, -1);
+
+	//给栈中的1,2两张表设置元表为{__mode="kv"},并将两张{__mode="kv"}弹出,这样栈中只有两张元表为{__mode="kv"}的空表了
 	lua_setmetatable(L, -3); 
 	lua_setmetatable(L, -3);
 
 	lua_pushnil(L);	// cfunction (coroutine.resume or coroutine.yield)
+
+	//数组l中的所有函数都注册到nil中，所以nil现在是一个table，table中的元素为l中的函数
 	luaL_setfuncs(L,l,3);
 
+	//libtable为栈顶元素的索引，即栈上目前有x个元素,就返回x，这里为libtable为3
 	int libtable = lua_gettop(L);
 
+	//将全局变量"coroutine"里的值压栈,即将协程库压栈
 	lua_getglobal(L, "coroutine");
+
+	//将coroutine.resume压栈
 	lua_getfield(L, -1, "resume");
 
+	//co_resume = coroutine.resume
 	lua_CFunction co_resume = lua_tocfunction(L, -1);
 	if (co_resume == NULL)
 		return luaL_error(L, "Can't get coroutine.resume");
+
+	//将coroutine.resume从栈上弹出
 	lua_pop(L,1);
 
+	//将l.resume压栈
 	lua_getfield(L, libtable, "resume");
+	//将co_resume压栈
 	lua_pushcfunction(L, co_resume);
+	//设置l.resume的upvalue为co_resume,并将co_resume弹出
 	lua_setupvalue(L, -2, 3);
+	//弹出l.resume
 	lua_pop(L,1);
 
+	//设置l.resume_co的上值为co_resume
 	lua_getfield(L, libtable, "resume_co");
 	lua_pushcfunction(L, co_resume);
 	lua_setupvalue(L, -2, 3);
 	lua_pop(L,1);
 
+	//将coroutine.yield压栈
 	lua_getfield(L, -1, "yield");
 
 	lua_CFunction co_yield = lua_tocfunction(L, -1);
@@ -248,11 +277,13 @@ luaopen_profile(lua_State *L) {
 		return luaL_error(L, "Can't get coroutine.yield");
 	lua_pop(L,1);
 
+	//设置l.yield的上值为co_yield
 	lua_getfield(L, libtable, "yield");
 	lua_pushcfunction(L, co_yield);
 	lua_setupvalue(L, -2, 3);
 	lua_pop(L,1);
 
+	//设置l.yield_co的上值为co_yield
 	lua_getfield(L, libtable, "yield_co");
 	lua_pushcfunction(L, co_yield);
 	lua_setupvalue(L, -2, 3);

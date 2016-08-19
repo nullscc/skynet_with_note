@@ -47,7 +47,7 @@ _cb(struct skynet_context * context, void * ud, int type, int session, uint32_t 
 	lua_pushinteger(L, session);
 	lua_pushinteger(L, source);
 
-	r = lua_pcall(L, 5, 0 , trace);	//调用skynet.dispatch的第二个参数来处理别的服务发过来的消息
+	r = lua_pcall(L, 5, 0 , trace);	//调用 skynet.dispatch_message 的第二个参数来处理别的服务发过来的消息
 
 	if (r == LUA_OK) {
 		return 0;

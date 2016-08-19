@@ -415,6 +415,7 @@ function skynet.wakeup(co)
 	end
 end
 
+-- 将func赋值给p.dispatch
 function skynet.dispatch(typename, func)
 	local p = proto[typename]
 	if func then  --lua类型的消息一般走这里
