@@ -41,6 +41,7 @@ do -- begin skynetco.resume
 		return unlock(co, skynet_resume(co, from, skynet_yield(from, ...)))
 	end
 
+	-- 如果resume的协程的状态是"BLOCKED"则将其父线程yield出来
 	local function resume(co, from, ok, ...)
 		if not ok then
 			return ok, ...

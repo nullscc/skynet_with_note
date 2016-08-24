@@ -48,21 +48,29 @@ diff_time(double start) {
 	}
 }
 
+/*****************************
+* 有两个upvalue:
+* 1.start time
+* 2.total time
+*****************************/
 static int
 lstart(lua_State *L) {
-	if (lua_type(L,1) == LUA_TTHREAD) {
+	if (lua_type(L,1) == LUA_TTHREAD) {	//如果第一个参数是一个lua线程,则将栈顶设置为第一个参数
 		lua_settop(L,1);
 	} else {
-		lua_pushthread(L);
+		lua_pushthread(L);	//如果第一个参数不是一个lua线程(一般不带参数),则将当前线程压栈
 	}
-	lua_rawget(L, lua_upvalueindex(2));
-	if (!lua_isnil(L, -1)) {
+	lua_rawget(L, lua_upvalueindex(2));	//将total time压栈
+	if (!lua_isnil(L, -1)) {	//如果不是total time对应的[thread]不是nil，说明没有连续调用了两次start
 		return luaL_error(L, "Thread %p start profile more than once", lua_topointer(L, 1));
 	}
+
+	//total_time[Lthread]=0
 	lua_pushthread(L);
 	lua_pushnumber(L, 0);
 	lua_rawset(L, lua_upvalueindex(2));
 
+	//start_time[Lthread]=0
 	lua_pushthread(L);
 	double ti = get_time();
 #ifdef DEBUG_LOG
@@ -74,6 +82,13 @@ lstart(lua_State *L) {
 	return 0;
 }
 
+/*****************************
+* 有两个upvalue:
+* 1.start time
+* 2.total time
+*
+* 返回从start到stop经历的总时间
+*****************************/
 static int
 lstop(lua_State *L) {
 	if (lua_type(L,1) == LUA_TTHREAD) {
@@ -87,16 +102,17 @@ lstop(lua_State *L) {
 	} 
 	double ti = diff_time(lua_tonumber(L, -1));
 
-	//以线程为键
+	//以线程为键，取得total_time[thread]的值
 	lua_pushthread(L);
 	lua_rawget(L, lua_upvalueindex(2));
-
 	double total_time = lua_tonumber(L, -1);
 
+	//start_time[thread] = nil
 	lua_pushthread(L);
 	lua_pushnil(L);
 	lua_rawset(L, lua_upvalueindex(1));
 
+	//total_time[thread] = nil
 	lua_pushthread(L);
 	lua_pushnil(L);
 	lua_rawset(L, lua_upvalueindex(2));
@@ -115,8 +131,8 @@ timing_resume(lua_State *L) {
 #ifdef DEBUG_LOG
 	lua_State *from = lua_tothread(L, -1);
 #endif
-	lua_rawget(L, lua_upvalueindex(2));
-	if (lua_isnil(L, -1)) {		// check total time
+	lua_rawget(L, lua_upvalueindex(2));	//得到total_time
+	if (lua_isnil(L, -1)) {		// check total time,如果是nil，就证明没有调用profile.start
 		lua_pop(L,1);
 	} else {
 		lua_pop(L,1);
@@ -131,16 +147,29 @@ timing_resume(lua_State *L) {
 
 	lua_CFunction co_resume = lua_tocfunction(L, lua_upvalueindex(3));
 
+	//调用lua coroutine的coroutine.resume
 	return co_resume(L);
 }
 
+/*****************************
+* 有三个upvalue:
+* 1.start time
+* 2.total time
+* 3.co_resume,即lua的coroutine.resume
+*****************************/
 static int
 lresume(lua_State *L) {
-	lua_pushvalue(L,1);
+	lua_pushvalue(L,1);	//把lua thread压栈
 	
 	return timing_resume(L);
 }
 
+/*****************************
+* 有三个upvalue:
+* 1.start time
+* 2.total time
+* 3.co_resume,即lua的coroutine.resume
+*****************************/
 static int
 lresume_co(lua_State *L) {
 	luaL_checktype(L, 2, LUA_TTHREAD);
@@ -183,6 +212,12 @@ timing_yield(lua_State *L) {
 	return co_yield(L);
 }
 
+/*****************************
+* 有三个upvalue:
+* 1.start time
+* 2.total time
+* 3.co_resume,即lua的coroutine.yield
+*****************************/
 static int
 lyield(lua_State *L) {
 	lua_pushthread(L);
@@ -190,6 +225,12 @@ lyield(lua_State *L) {
 	return timing_yield(L);
 }
 
+/*****************************
+* 有三个upvalue:
+* 1.start time
+* 2.total time
+* 3.co_resume,即lua的coroutine.yield
+*****************************/
 static int
 lyield_co(lua_State *L) {
 	luaL_checktype(L, 1, LUA_TTHREAD);
@@ -259,7 +300,7 @@ luaopen_profile(lua_State *L) {
 	//将co_resume压栈
 	lua_pushcfunction(L, co_resume);
 	//设置l.resume的upvalue为co_resume,并将co_resume弹出
-	lua_setupvalue(L, -2, 3);
+	lua_setupvalue(L, -2, 3);	//-2表示要设置的函数在栈中的位置，3表示要设置的是第几个upvalue
 	//弹出l.resume
 	lua_pop(L,1);
 
