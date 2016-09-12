@@ -32,7 +32,7 @@ skynet.start(function()
 			end
 		end
 
-		-- 如果是单节点模式，则slave服务为cslave.lua
+		-- 如果是多节点模式，则slave服务为cslave.lua
 		local ok, slave = pcall(skynet.newservice, "cslave")
 		if not ok then
 			skynet.abort()
