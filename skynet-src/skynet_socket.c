@@ -80,19 +80,19 @@ skynet_socket_poll() {
 	switch (type) {
 	case SOCKET_EXIT:
 		return 0;
-	case SOCKET_DATA:
+	case SOCKET_DATA:	//远端有数据发送过来
 		forward_message(SKYNET_SOCKET_TYPE_DATA, false, &result);
 		break;
 	case SOCKET_CLOSE:
 		forward_message(SKYNET_SOCKET_TYPE_CLOSE, false, &result);
 		break;
-	case SOCKET_OPEN:
+	case SOCKET_OPEN:	//本地打开socket连接
 		forward_message(SKYNET_SOCKET_TYPE_CONNECT, true, &result);
 		break;
 	case SOCKET_ERROR:
 		forward_message(SKYNET_SOCKET_TYPE_ERROR, true, &result);
 		break;
-	case SOCKET_ACCEPT:
+	case SOCKET_ACCEPT:	//说明acccpt成功了
 		forward_message(SKYNET_SOCKET_TYPE_ACCEPT, true, &result);
 		break;
 	case SOCKET_UDP:

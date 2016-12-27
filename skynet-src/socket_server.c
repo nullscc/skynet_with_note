@@ -21,15 +21,15 @@
 #define MAX_SOCKET_P 16
 #define MAX_EVENT 64
 #define MIN_READ_BUFFER 64
-#define SOCKET_TYPE_INVALID 0
+#define SOCKET_TYPE_INVALID 0 		//初识时的状态
 #define SOCKET_TYPE_RESERVE 1
-#define SOCKET_TYPE_PLISTEN 2
-#define SOCKET_TYPE_LISTEN 3
-#define SOCKET_TYPE_CONNECTING 4
-#define SOCKET_TYPE_CONNECTED 5
+#define SOCKET_TYPE_PLISTEN 2 		//监听已经完成
+#define SOCKET_TYPE_LISTEN 3 		
+#define SOCKET_TYPE_CONNECTING 4 	//套接字正在进行三路握手
+#define SOCKET_TYPE_CONNECTED 5 	//套接字三路握手已完成
 #define SOCKET_TYPE_HALFCLOSE 6
 #define SOCKET_TYPE_PACCEPT 7
-#define SOCKET_TYPE_BIND 8
+#define SOCKET_TYPE_BIND 8 			//上层已经调用了socketdriver.bind，绑定端口还未发生，绑定端口要上层调用socketdriver.listen后才发生
 
 #define MAX_SOCKET (1<<MAX_SOCKET_P)
 
@@ -962,23 +962,23 @@ ctrl_cmd(struct socket_server *ss, struct socket_message *result) {
 	block_readpipe(fd, buffer, len);
 	// ctrl command only exist in local fd, so don't worry about endian.
 	switch (type) {
-	case 'S':	//listen与accept后都会调用'S'
+	case 'S':	//listen与accept后都会调用'S' 返回:SOCKET_ERROR、SOCKET_OPEN
 		return start_socket(ss,(struct request_start *)buffer, result);
-	case 'B':
+	case 'B':	//返回:SOCKET_ERROR、SOCKET_OPEN
 		return bind_socket(ss,(struct request_bind *)buffer, result);
-	case 'L':
+	case 'L':	//返回:-1、SOCKET_ERROR
 		return listen_socket(ss,(struct request_listen *)buffer, result);
-	case 'K':
+	case 'K':	//返回:SOCKET_CLOSE、
 		return close_socket(ss,(struct request_close *)buffer, result);
-	case 'O':
+	case 'O':	//返回:SOCKET_OPEN、SOCKET_ERROR
 		return open_socket(ss, (struct request_open *)buffer, result);
-	case 'X':
+	case 'X':	//返回:SOCKET_EXIT
 		result->opaque = 0;
 		result->id = 0;
 		result->ud = 0;
 		result->data = NULL;
 		return SOCKET_EXIT;
-	case 'D':	//服务端向客户端发包
+	case 'D':	//服务端向客户端发包,返回:SOCKET_CLOSE、-1
 		return send_socket(ss, (struct request_send *)buffer, result, PRIORITY_HIGH, NULL);
 	case 'P':
 		return send_socket(ss, (struct request_send *)buffer, result, PRIORITY_LOW, NULL);
@@ -986,15 +986,15 @@ ctrl_cmd(struct socket_server *ss, struct socket_message *result) {
 		struct request_send_udp * rsu = (struct request_send_udp *)buffer;
 		return send_socket(ss, &rsu->send, result, PRIORITY_HIGH, rsu->address);
 	}
-	case 'C':
+	case 'C':	//返回:SOCKET_CLOSE、-1
 		return set_udp_address(ss, (struct request_setudp *)buffer, result);
-	case 'T':	//状态没有变化，仅仅是设置nodelay
+	case 'T':	//状态没有变化，仅仅是设置nodelay 返回:-1
 		setopt_socket(ss, (struct request_setopt *)buffer);
 		return -1;
-	case 'U':
+	case 'U':	//返回:-1
 		add_udp_socket(ss, (struct request_udp *)buffer);
 		return -1;
-	default:
+	default:	//返回:-1
 		fprintf(stderr, "socket-server: Unknown ctrl %c.\n",type);
 		return -1;
 	};
