@@ -1,3 +1,7 @@
+/*
+* 此库的功能最主要的是方便计算每个协程所花费的CPU时间
+*/
+
 #include <stdio.h>
 #include <lua.h>
 #include <lauxlib.h>
@@ -239,6 +243,15 @@ lyield_co(lua_State *L) {
 	return timing_yield(L);
 }
 
+/*****************************
+* 主要是为 luaL_Reg l中的所有函数设置上值
+* 1.公共上值:start time表，以协程为索引
+* 2.公共上值:total time表，以协程为索引
+* 3.私有上值:
+	start、stop函数的第三个upvalue均为nil
+	resume、resume_co的第3个upvalue为coroutine.resume
+	yield、yield_co的第3个upvalue为coroutine.yield
+*****************************/
 int
 luaopen_profile(lua_State *L) {
 	luaL_checkversion(L);
@@ -275,10 +288,12 @@ luaopen_profile(lua_State *L) {
 
 	lua_pushnil(L);	// cfunction (coroutine.resume or coroutine.yield)
 
-	//数组l中的所有函数都注册到nil中，所以nil现在是一个table，table中的元素为l中的函数
+	//数组l中的所有函数都注册到luaL_newlibtable创建的表中，所以数组l中的所有函数共享3个upvalue(2张元表为{__mode="kv"}的空表，一个nil)
+	//设置第三个共享的upvalue为nil的原因是方便后面再针对单个函数绑定upvalue
+	//三个upvalue注册完毕全部弹出
 	luaL_setfuncs(L,l,3);
 
-	//libtable为栈顶元素的索引，即栈上目前有x个元素,就返回x，这里为libtable为3
+	//libtable为栈顶元素的索引，即栈上目前有x个元素,就返回x，这里为libtable为1
 	int libtable = lua_gettop(L);
 
 	//将全局变量"coroutine"里的值压栈,即将协程库压栈
