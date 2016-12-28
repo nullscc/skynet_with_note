@@ -130,7 +130,7 @@ end
 
 -- suspend is local function
 function suspend(co, result, command, param, size)
-	if not result then
+	if not result then	-- 当协程错误发生时
 		local session = session_coroutine_id[co]
 		if session then -- coroutine may fork by others (session is nil)
 			local addr = session_coroutine_address[co]
@@ -167,7 +167,7 @@ function suspend(co, result, command, param, size)
 			ret = false
 		end
 		return suspend(co, coroutine_resume(co, ret))
-		--coroutine_resume会恢复处理函数中的协程执行，到这里处理函数执行完毕了，即co_create中的f函数执行完毕了
+		--coroutine_resume会恢复处理函数中的协程执行(会从skynet.ret中的coroutine_yield("RETURN", msg, sz)处返回)，到这里处理函数执行完毕了，即co_create中的f函数执行完毕了
 	elseif command == "RESPONSE" then
 		local co_session = session_coroutine_id[co]
 		local co_address = session_coroutine_address[co]
@@ -217,7 +217,7 @@ function suspend(co, result, command, param, size)
 		session_response[co] = true
 		unresponse[response] = true
 		return suspend(co, coroutine_resume(co, response))
-	elseif command == "EXIT" then
+	elseif command == "EXIT" then	-- 到这里对于收到消息的一方来说这次消息完全处理完毕
 		-- coroutine exit
 		local address = session_coroutine_address[co]
 		release_watching(address)
@@ -253,7 +253,7 @@ local function co_create(f)
 			end
 		end)
 	else
-		coroutine_resume(co, f)
+		coroutine_resume(co, f)							-- 这里coroutine_resume对应的是上面的coroutine_yield "EXIT"
 	end
 	return co
 end
@@ -274,7 +274,7 @@ local function raw_dispatch_message(prototype, msg, sz, session, source)
 	else
 		local p = proto[prototype]
 		if p == nil then
-			if session ~= 0 then
+			if session ~= 0 then	-- 如果是需要返回值的，那么告诉源服务，说"我对你来说是dead_service不要再发过来了"
 				c.send(source, skynet.PTYPE_ERROR, session, "")
 			else
 				unknown_request(session, source, msg, sz, prototype)
@@ -402,7 +402,7 @@ end
 
 function skynet.send(addr, typename, ...)
 	local p = proto[typename]
-	return c.send(addr, p.id, 0 , p.pack(...))
+	return c.send(addr, p.id, 0 , p.pack(...))	--由于skynet.send是不需要返回值的，所以就不需要记录session，所以为0即可
 end
 
 skynet.genid = assert(c.genid)
@@ -419,7 +419,7 @@ skynet.trash = assert(c.trash)
 
 local function yield_call(service, session)
 	watching_session[session] = service
-	local succ, msg, sz = coroutine_yield("CALL", session)	--会让出到suspend函数中，即执行:suspend(true, "CALL", session)
+	local succ, msg, sz = coroutine_yield("CALL", session)	--会让出到raw_dispatch_message中的第二个suspend函数中，即执行:suspend(true, "CALL", session)
 	watching_session[session] = nil
 	if not succ then
 		error "call failed"
@@ -430,6 +430,7 @@ end
 function skynet.call(addr, typename, ...)
 	local p = proto[typename]
 	local session = c.send(addr, p.id , nil , p.pack(...))		-- 发送消息
+	-- 由于skynet.call是需要返回值的，所以c.send的第三个参数表示由框架自动分配一个session，以便返回时根据相应的session找到对应的协程进行处理
 	if session == nil then
 		error("call to invalid address " .. skynet.address(addr))
 	end
