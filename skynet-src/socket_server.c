@@ -21,7 +21,7 @@
 #define MAX_SOCKET_P 16
 #define MAX_EVENT 64
 #define MIN_READ_BUFFER 64
-#define SOCKET_TYPE_INVALID 0 		//初识时的状态
+#define SOCKET_TYPE_INVALID 0 		//初始时的状态
 #define SOCKET_TYPE_RESERVE 1
 #define SOCKET_TYPE_PLISTEN 2 		//监听已经完成
 #define SOCKET_TYPE_LISTEN 3 		
@@ -298,7 +298,7 @@ socket_server_create() {
 	ss->event_fd = efd;			//epoll的文件描述符
 	ss->recvctrl_fd = fd[0];	//管道的读取端
 	ss->sendctrl_fd = fd[1];	//管道的写入端
-	ss->checkctrl = 1;
+	ss->checkctrl = 1;			//控制是否去检查本地从管道写过来的请求
 
 	for (i=0;i<MAX_SOCKET;i++) {
 		struct socket *s = &ss->slot[i];	//ss->slot[i]为一个struct socket
@@ -389,7 +389,7 @@ new_fd(struct socket_server *ss, int id, int fd, int protocol, uintptr_t opaque,
 	s->fd = fd;
 	s->protocol = protocol;
 	s->p.size = MIN_READ_BUFFER;
-	s->opaque = opaque;
+	s->opaque = opaque;		// 调用监听动作的服务的地址
 	s->wb_size = 0;
 	check_wb_list(&s->high);
 	check_wb_list(&s->low);
@@ -764,7 +764,8 @@ static int
 listen_socket(struct socket_server *ss, struct request_listen * request, struct socket_message *result) {
 	int id = request->id;
 	int listen_fd = request->fd;
-	struct socket *s = new_fd(ss, id, listen_fd, PROTOCOL_TCP, request->opaque, false);
+	struct socket *s = new_fd(ss, id, listen_fd, PROTOCOL_TCP, request->opaque, false);	
+	// 这里的request->opaque就是调用最上层调用监听动作服务的地址  注意这里最后一个参数是false，代表这里还没有将监听描述符给epoll管理
 	if (s == NULL) {
 		goto _failed;
 	}
@@ -829,7 +830,7 @@ static int
 start_socket(struct socket_server *ss, struct request_start *request, struct socket_message *result) {
 	int id = request->id;
 	result->id = id;
-	result->opaque = request->opaque;
+	result->opaque = request->opaque;		// 服务的地址
 	result->ud = 0;
 	result->data = NULL;
 	struct socket *s = &ss->slot[HASH_ID(id)];
@@ -1005,7 +1006,7 @@ ctrl_cmd(struct socket_server *ss, struct socket_message *result) {
 // return -1 (ignore) when error
 static int
 forward_message_tcp(struct socket_server *ss, struct socket *s, struct socket_message * result) {
-	int sz = s->p.size;
+	int sz = s->p.size;		// 先接收预设的字节数,即在new_fd函数中设置的 MIN_READ_BUFFER
 	char * buffer = MALLOC(sz);
 	int n = (int)read(s->fd, buffer, sz);
 	if (n<0) {
@@ -1044,7 +1045,7 @@ forward_message_tcp(struct socket_server *ss, struct socket *s, struct socket_me
 
 	result->opaque = s->opaque;
 	result->id = s->id;
-	result->ud = n;
+	result->ud = n;		// 收到了多少个字节数的网络数据
 	result->data = buffer;
 	return SOCKET_DATA;
 }
@@ -1146,7 +1147,7 @@ static int
 report_accept(struct socket_server *ss, struct socket *s, struct socket_message *result) {
 	union sockaddr_all u;
 	socklen_t len = sizeof(u);
-	int client_fd = accept(s->fd, &u.s, &len);
+	int client_fd = accept(s->fd, &u.s, &len);	// 返回已连接描述符
 	if (client_fd < 0) {
 		if (errno == EMFILE || errno == ENFILE) {
 			result->opaque = s->opaque;
@@ -1170,10 +1171,10 @@ report_accept(struct socket_server *ss, struct socket *s, struct socket_message 
 		close(client_fd);
 		return 0;
 	}
-	ns->type = SOCKET_TYPE_PACCEPT;
-	result->opaque = s->opaque;
+	ns->type = SOCKET_TYPE_PACCEPT;		// 创建已连接描述符后的状态为 SOCKET_TYPE_PACCEPT
+	result->opaque = s->opaque;			// 调用的服务的地址，继承的监听描述符的
 	result->id = s->id;
-	result->ud = id;
+	result->ud = id;					// 当是accept时ud为id
 	result->data = NULL;
 
 	void * sin_addr = (u.s.sa_family == AF_INET) ? (void*)&u.v4.sin_addr : (void *)&u.v6.sin6_addr;
@@ -1181,7 +1182,7 @@ report_accept(struct socket_server *ss, struct socket *s, struct socket_message 
 	char tmp[INET6_ADDRSTRLEN];
 	if (inet_ntop(u.s.sa_family, sin_addr, tmp, sizeof(tmp))) {
 		snprintf(ss->buffer, sizeof(ss->buffer), "%s:%d", tmp, sin_port);
-		result->data = ss->buffer;
+		result->data = ss->buffer;		// data为服务的 "地址:端口号"组成的字符串
 	}
 
 	return 1;
@@ -1218,12 +1219,12 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 					return type;
 				} else
 					continue;
-			} else {
+			} else {			//如果没有本地的命令过来，就先暂时不检查本地的命令，等处理完远端的数据再打开本地管道的"监听"
 				ss->checkctrl = 0;
 			}
 		}
 		if (ss->event_index == ss->event_n) { //如果event_index等于event_n，说明已经处理完了
-			ss->event_n = sp_wait(ss->event_fd, ss->ev, MAX_EVENT);		//等待有事情发生
+			ss->event_n = sp_wait(ss->event_fd, ss->ev, MAX_EVENT);		//等待有事情发生， 返回的是需要处理的事件个数
 			ss->checkctrl = 1;	//检查本地的请求标志
 			if (more) {
 				*more = 0;
@@ -1246,7 +1247,8 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 		case SOCKET_TYPE_LISTEN: {	//listen完以后管道再接收一个"S"命令状态就变为SOCKET_TYPE_LISTEN了
 			int ok = report_accept(ss, s, result);
 			if (ok > 0) {	//accept成功后会大于0
-				return SOCKET_ACCEPT;
+				return SOCKET_ACCEPT;		
+				// 返回给 skynet_socket_poll 处理，这时socket已连接描述符类型为 SOCKET_TYPE_PACCEPT 并且此已连接描述符还未被epoll管理
 			} if (ok < 0 ) {
 				return SOCKET_ERROR;
 			}
@@ -1260,7 +1262,7 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 			if (e->read) {	//有数据可读,在sp_wait中进行设置
 				int type;
 				if (s->protocol == PROTOCOL_TCP) {
-					type = forward_message_tcp(ss, s, result);
+					type = forward_message_tcp(ss, s, result);		// 正常的话返回 SOCKET_DATA
 				} else {
 					type = forward_message_udp(ss, s, result);
 					if (type == SOCKET_UDP) {
@@ -1271,7 +1273,7 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 				}
 				if (e->write && type != SOCKET_CLOSE && type != SOCKET_ERROR) {
 					// Try to dispatch write message next step if write flag set.
-					e->read = false;
+					e->read = false;	// 如果是可读又可写的，处理完读后处理写
 					--ss->event_index;
 				}
 				if (type == -1)
@@ -1294,7 +1296,7 @@ send_request(struct socket_server *ss, struct request_package *request, char typ
 	request->header[6] = (uint8_t)type;
 	request->header[7] = (uint8_t)len;
 	for (;;) {
-		int n = write(ss->sendctrl_fd, &request->header[6], len+2);
+		int n = write(ss->sendctrl_fd, &request->header[6], len+2);	// 写到管道的发送端/写端
 		if (n<0) {
 			if (errno != EINTR) {
 				fprintf(stderr, "socket-server : send ctrl command error %s.\n", strerror(errno));
@@ -1476,11 +1478,11 @@ socket_server_listen(struct socket_server *ss, uintptr_t opaque, const char * ad
 		close(fd);
 		return id;
 	}
-	request.u.listen.opaque = opaque;
+	request.u.listen.opaque = opaque;		//opaque就是调用listen的服务的地址
 	request.u.listen.id = id;
 	request.u.listen.fd = fd;
 	send_request(ss, &request, 'L', sizeof(request.u.listen));
-	return id;
+	return id;	// 注意这里返回的是skynet框架分配的一个id 为s->slot的一个下标，一个数组索引而已
 }
 
 int

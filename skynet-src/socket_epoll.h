@@ -52,7 +52,7 @@ sp_write(int efd, int sock, void *ud, bool enable) {
 static int 
 sp_wait(int efd, struct event *e, int max) {
 	struct epoll_event ev[max];
-	int n = epoll_wait(efd , ev, max, -1);
+	int n = epoll_wait(efd , ev, max, -1);		// 返回的是需要处理的事件个数
 	int i;
 	for (i=0;i<n;i++) {
 		e[i].s = ev[i].data.ptr;

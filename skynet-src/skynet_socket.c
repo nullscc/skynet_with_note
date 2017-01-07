@@ -30,10 +30,12 @@ skynet_socket_free() {
 }
 
 // mainloop thread
+// padding只有在本地管道过来的命令时为true
 static void
 forward_message(int type, bool padding, struct socket_message * result) {
 	struct skynet_socket_message *sm;
 	size_t sz = sizeof(*sm);
+	
 	if (padding) {
 		if (result->data) {
 			size_t msg_sz = strlen(result->data);
@@ -86,7 +88,7 @@ skynet_socket_poll() {
 	case SOCKET_CLOSE:
 		forward_message(SKYNET_SOCKET_TYPE_CLOSE, false, &result);
 		break;
-	case SOCKET_OPEN:	//本地打开socket连接
+	case SOCKET_OPEN:	//本地打开socket连接进行监听 or 连接建立成功 or 转换网络包目的地址
 		forward_message(SKYNET_SOCKET_TYPE_CONNECT, true, &result);
 		break;
 	case SOCKET_ERROR:
@@ -137,8 +139,9 @@ skynet_socket_send_lowpriority(struct skynet_context *ctx, int id, void *buffer,
 
 int 
 skynet_socket_listen(struct skynet_context *ctx, const char *host, int port, int backlog) {
-	uint32_t source = skynet_context_handle(ctx);
+	uint32_t source = skynet_context_handle(ctx);		// 哪个服务调用就取得那个服务的地址
 	return socket_server_listen(SOCKET_SERVER, source, host, port, backlog);
+	// 注意这里返回的是skynet框架分配的一个id 为s->slot的一个下标，一个数组索引而已
 }
 
 int 

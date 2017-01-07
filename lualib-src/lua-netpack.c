@@ -179,7 +179,8 @@ save_uncomplete(lua_State *L, int fd) {
 
 static inline int
 read_size(uint8_t * buffer) {
-	int r = (int)buffer[0] << 8 | (int)buffer[1];
+	int r = (int)buffer[0] << 8 | (int)buffer[1];		// 由于skynet用的protobuf的前两个字节表示包长度(不包括前两个字节)，这里把包长度解析出来
+	// sproto没用过，应该前两个字节也是表示包长度吧
 	return r;
 }
 
@@ -272,9 +273,11 @@ filter_data_(lua_State *L, int fd, uint8_t * buffer, int size) {
 			uc->header = *buffer;
 			return 1;
 		}
-		int pack_size = read_size(buffer);
-		buffer+=2;
-		size-=2;
+		int pack_size = read_size(buffer);	
+		// buffer就是从网络中真实收到的字节码，在堆中的大小为 MIN_READ_BUFFER
+		// 这里pack_size 是收到的网络包真实大小除去protobuf/sproto前两个字节的字节数
+		buffer+=2;		// 处理protobuf的前两个字节
+		size-=2;		// size是read函数收到的真实的数据字节数
 
 		if (size < pack_size) {
 			struct uncomplete * uc = save_uncomplete(L, fd);
@@ -351,9 +354,9 @@ lfilter(lua_State *L) {
 		// ignore listen id (message->id)
 		assert(size == -1);	// never padding string
 		return filter_data(L, message->id, (uint8_t *)buffer, message->ud);
-	case SKYNET_SOCKET_TYPE_CONNECT:
+	case SKYNET_SOCKET_TYPE_CONNECT:	// 'L'->'S'后
 		// ignore listen fd connect
-		return 1;
+		return 1;		// 这里其实返回的是上层传过来的 queue
 	case SKYNET_SOCKET_TYPE_CLOSE:
 		// no more data in fd (message->id)
 		close_uncomplete(L, message->id);
@@ -361,11 +364,11 @@ lfilter(lua_State *L) {
 		lua_pushinteger(L, message->id);
 		return 3;
 	case SKYNET_SOCKET_TYPE_ACCEPT:
-		lua_pushvalue(L, lua_upvalueindex(TYPE_OPEN));
+		lua_pushvalue(L, lua_upvalueindex(TYPE_OPEN));	// 将字符串 "open" 压栈
 		// ignore listen id (message->id);
-		lua_pushinteger(L, message->ud);
-		pushstring(L, buffer, size);
-		return 4;
+		lua_pushinteger(L, message->ud);				// 将ss->slot的数组下标压栈
+		pushstring(L, buffer, size);					// 将字符串压栈，这里的字符串其实是 "192.168.1.1:1234" 这样的形式，就是ip和端口组成的字符串
+		return 4;										// 返回 queue open id "192.168.1.1:1234"
 	case SKYNET_SOCKET_TYPE_ERROR:
 		// no more data in fd (message->id)
 		close_uncomplete(L, message->id);
@@ -472,7 +475,7 @@ luaopen_netpack(lua_State *L) {
 		{ "tostring", ltostring },
 		{ NULL, NULL },
 	};
-	luaL_newlib(L,l);
+	luaL_newlib(L,l);	// 创建一张新的表，并把l注册进去
 
 	// the order is same with macros : TYPE_* (defined top)
 	lua_pushliteral(L, "data");

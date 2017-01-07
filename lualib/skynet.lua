@@ -269,7 +269,7 @@ local function co_create(f)
 	return co
 end
 
--- 所有lua服务的消息处理函数(从定时器发过来的消息源地址(source)是 0)
+-- 所有lua服务的消息处理函数(从定时器发过来的消息源地址(source)是 0) 这里的msg就是特定的数据结构体
 local function raw_dispatch_message(prototype, msg, sz, session, source)
 	-- skynet.PTYPE_RESPONSE = 1, read skynet.h
 	if prototype == 1 then 		-- 处理远端发送过来的返回值
