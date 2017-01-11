@@ -76,7 +76,7 @@ end
 
 local function launch_service(service, ...)
 	local param = table.concat({...}, " ")
-	local inst = skynet.launch(service, param)
+	local inst = skynet.launch(service, param)	-- service 为要启动的服务名 param 为以空格分开的参数
 	local response = skynet.response()
 	if inst then
 		services[inst] = service .. " " .. param
@@ -88,7 +88,7 @@ local function launch_service(service, ...)
 	return inst
 end
 
-function command.LAUNCH(_, service, ...)
+function command.LAUNCH(_, service, ...)	-- _为发送此消息的源地址 service一般为启动lua服务的中介 一般为 snlua
 	launch_service(service, ...)
 	return NORET
 end

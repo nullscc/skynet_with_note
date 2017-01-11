@@ -120,7 +120,7 @@ drop_message(struct skynet_message *msg, void *ud) {
 创建一个C服务，步骤如下:
 	1.打开动态连接库，返回一个struct skynet_module
 	2.调用xxx_create创建一个实例
-	3.调用skynet_handle_register将服务的结构体:struct skynet_context注册到skynet_handle.c中统一进行管理
+	3.调用 skynet_handle_register 将服务的结构体:struct skynet_context 注册到 skynet_handle.c 中统一进行管理
 	4.创建服务的消息队列
 	5.注册消息处理函数
 	6.将服务的消息队列放入全局的消息队列尾
@@ -132,12 +132,12 @@ skynet_context_new(const char * name, const char *param) {
 	if (mod == NULL)
 		return NULL;
 
-	//如果动态库的xxx_create函数存在，就调用它返回一个inst,一个inst就是那个动态库特有的结构体指针
+	//如果动态库的 xxx_create 函数存在，就调用它返回一个 inst ,一个 inst 就是那个 动态库/C服务 特有的结构体指针
 	void *inst = skynet_module_instance_create(mod);
 	if (inst == NULL)
 		return NULL;
 
-	//动态分配一个struct skynet_context,一个struct skynet_context对应skynet的一个服务
+	//动态分配一个 struct skynet_context,一个 struct skynet_context 对应 skynet 的一个服务
 	struct skynet_context * ctx = skynet_malloc(sizeof(*ctx));
 	CHECKCALLING_INIT(ctx)
 
@@ -154,7 +154,8 @@ skynet_context_new(const char * name, const char *param) {
 	// Should set to 0 first to avoid skynet_handle_retireall get an uninitialized handle
 	ctx->handle = 0;	
 
-	//将struct skynet_context指针挂在struct handle_storage的slot下，统一进行管理
+	// 将struct skynet_context 指针挂在 struct handle_storage 的slot下，统一进行管理
+	// 也是在这里得到服务的地址
 	ctx->handle = skynet_handle_register(ctx);
 
 	//创建服务的消息队列
@@ -164,12 +165,12 @@ skynet_context_new(const char * name, const char *param) {
 
 	CHECKCALLING_BEGIN(ctx)
 
-	//调用xxx_init，一般是消息处理函数、全局服务名字的注册及其他的初始化
+	//调用 xxx_init ，一般是消息处理函数、全局服务名字的注册及其他的初始化
 	int r = skynet_module_instance_init(mod, inst, ctx, param);
 	CHECKCALLING_END(ctx)
 	if (r == 0) { //成功
 
-		//如果引用为0了，就释放struct skynet_context 
+		//如果引用为0了，就释放 struct skynet_context 
 		struct skynet_context * ret = skynet_context_release(ctx);
 		if (ret) {
 			ctx->init = true;
@@ -300,7 +301,7 @@ skynet_context_dispatchall(struct skynet_context * ctx) {
 
 struct message_queue * 
 skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue *q, int weight) {
-	if (q == NULL) {
+	if (q == NULL) {				//如果全局消息队列是空的，就弹出一个出来 如果不为空，说明上一个已经弹出了，继续用上一个
 		q = skynet_globalmq_pop();	//从全局的消息队列中弹出一个服务的消息队列
 		if (q==NULL)
 			return NULL;
@@ -322,7 +323,8 @@ skynet_context_message_dispatch(struct skynet_monitor *sm, struct message_queue 
 		if (skynet_mq_pop(q,&msg)) { 	//从服务的消息队列中弹出一条服务消息
 			skynet_context_release(ctx);
 			return skynet_globalmq_pop();
-		} else if (i==0 && weight >= 0) {	//从服务的消息队列中取出消息成功
+		} else if (i==0 && weight >= 0) {	
+			//从服务的消息队列中取出消息成功 权重为-1为只处理一条消息 权重为0就将此服务的所有消息处理完 权重大于1就处理服务的部分消息
 			n = skynet_mq_length(q);
 			n >>= weight;
 		}
@@ -485,7 +487,7 @@ cmd_kill(struct skynet_context * context, const char * param) {
 }
 
 static const char *
-cmd_launch(struct skynet_context * context, const char * param) {
+cmd_launch(struct skynet_context * context, const char * param) {	// param为一串字符串(服务名和参数组成，以空格分开)
 	size_t sz = strlen(param);
 	char tmp[sz+1];
 	strcpy(tmp,param);

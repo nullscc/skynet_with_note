@@ -42,29 +42,29 @@ skynet_handle_register(struct skynet_context *ctx) {
 		int i;
 		for (i=0;i<s->slot_size;i++) {
 			uint32_t handle = (i+s->handle_index) & HANDLE_MASK; //将高八位置为0
-			int hash = handle & (s->slot_size-1);	//从1开始到0终止，如果hash为0了，说明slot_size已经用尽了
+			int hash = handle & (s->slot_size-1);	//从1开始增长，到0终止，如果hash为0了，说明slot_size已经用尽了
 			if (s->slot[hash] == NULL) {
 				s->slot[hash] = ctx;
 				s->handle_index = handle + 1;
 
 				rwlock_wunlock(&s->lock);
 
-				handle |= s->harbor; //
+				handle |= s->harbor; 				//将服务的高八位置为 harbor 编号
 				return handle;
 			}
 		}
 
 		//如果不够分配新的slot，成倍扩充，将老的slot复制过来
-		assert((s->slot_size*2 - 1) <= HANDLE_MASK);
+		assert((s->slot_size*2 - 1) <= HANDLE_MASK);	// 一个节点最多可拥有的服务数为: 0xffffff
 		struct skynet_context ** new_slot = skynet_malloc(s->slot_size * 2 * sizeof(struct skynet_context *));
 		memset(new_slot, 0, s->slot_size * 2 * sizeof(struct skynet_context *));
 		for (i=0;i<s->slot_size;i++) {
 			int hash = skynet_context_handle(s->slot[i]) & (s->slot_size * 2 - 1);
-			//复制时hash值为slot_size->1->(s->slot_size-1)，复制完以后hash为0处又为NULL了
+			//复制时hash值为:1-> s->slot_size， 即将老的全部复制到新的数组的起始处
 			assert(new_slot[hash] == NULL);
 			new_slot[hash] = s->slot[i];
 		}
-		skynet_free(s->slot);
+		skynet_free(s->slot);	// 复制完后将老的slot删除
 		s->slot = new_slot;
 		s->slot_size *= 2;
 	}

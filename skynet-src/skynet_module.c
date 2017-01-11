@@ -63,7 +63,7 @@ _try_open(struct modules *m, const char * name) {
 	return dl;
 }
 
-//查找模块的skynet_module
+//查找模块的 skynet_module
 static struct skynet_module * 
 _query(const char * name) {
 	int i;

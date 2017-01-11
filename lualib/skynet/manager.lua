@@ -1,7 +1,7 @@
 local skynet = require "skynet"
 local c = require "skynet.core"
 
-function skynet.launch(...)
+function skynet.launch(...)	-- ... 为要启动的服务名加上参数组成的字符串 参数以空格分隔
 	local addr = c.command("LAUNCH", table.concat({...}," "))
 	if addr then
 		return tonumber("0x" .. string.sub(addr , 2))

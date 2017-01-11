@@ -206,7 +206,8 @@ start(int thread) {
 	create_thread(&pid[1], thread_timer, m);	//启动线程: thread_timer
 	create_thread(&pid[2], thread_socket, m);	//启动线程: thread_socket
 
-	static int weight[] = { //每个服务都有一个权重
+	static int weight[] = { 
+		//每个服务都有一个权重 权重为-1为只处理一条消息 权重为0就将此服务的所有消息处理完 权重大于1就处理服务的部分消息
 		-1, -1, -1, -1, 0, 0, 0, 0,
 		1, 1, 1, 1, 1, 1, 1, 1, 
 		2, 2, 2, 2, 2, 2, 2, 2, 
@@ -237,7 +238,7 @@ bootstrap(struct skynet_context * logger, const char * cmdline) {
 	char args[sz+1]; //"bootstrap"
 	sscanf(cmdline, "%s %s", name, args);
 
-	//新建snlua服务
+	//新建 bootstrap 服务
 	struct skynet_context *ctx = skynet_context_new(name, args);
 
 	//创建不成功
@@ -268,18 +269,18 @@ skynet_start(struct skynet_config * config) {
 	skynet_harbor_init(config->harbor);
 	skynet_handle_init(config->harbor);
 	skynet_mq_init();
-	skynet_module_init(config->module_path);
+	skynet_module_init(config->module_path);	// module_path 为C服务的路径
 	skynet_timer_init();
 	skynet_socket_init();
 
-	//创建第一个服务:logger
+	//创建第一个服务:logger(由于错误消息都是从logger服务写到相应的文件描述符的，所以需要先启动logger服务)
 	struct skynet_context *ctx = skynet_context_new(config->logservice, config->logger);
 	if (ctx == NULL) {
 		fprintf(stderr, "Can't launch %s service\n", config->logservice);
 		exit(1);
 	}
 
-
+	// 加载 snlua 模块，并启动 bootstrap 服务
 	bootstrap(ctx, config->bootstrap); 
 
 	//初始化工作基本完成，正式启动skynet

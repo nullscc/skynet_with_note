@@ -131,7 +131,7 @@ main(int argc, char *argv[]) {
 	_init_env(L);
 
 	config.thread =  optint("thread",8);
-	config.module_path = optstring("cpath","./cservice/?.so");
+	config.module_path = optstring("cpath","./cservice/?.so");	// C服务的路径
 	config.harbor = optint("harbor", 1);
 	config.bootstrap = optstring("bootstrap","snlua bootstrap");
 	config.daemon = optstring("daemon", NULL);

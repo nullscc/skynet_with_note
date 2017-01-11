@@ -58,7 +58,7 @@ local function waitfor(name , func, ...)
 end
 
 local function read_name(service_name)
-	if string.byte(service_name) == 64 then -- '@'
+	if string.byte(service_name) == 64 then -- 64的ASCII码为 '@'
 		return string.sub(service_name , 2)
 	else
 		return service_name

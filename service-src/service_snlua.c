@@ -72,46 +72,52 @@ optstring(struct skynet_context *ctx, const char *key, const char * str) {
 	return ret;
 }
 
-//通过loader.lua加载一个lua服务
+//通过 loader.lua 加载一个lua服务
 static int
 init_cb(struct snlua *l, struct skynet_context *ctx, const char * args, size_t sz) {
 	lua_State *L = l->L;
 	l->ctx = ctx;
-	lua_gc(L, LUA_GCSTOP, 0);
+	lua_gc(L, LUA_GCSTOP, 0);	// 停止垃圾回收
 	lua_pushboolean(L, 1);  /* signal for libraries to ignore env. vars. */
-	lua_setfield(L, LUA_REGISTRYINDEX, "LUA_NOENV");
-	luaL_openlibs(L);
-	lua_pushlightuserdata(L, ctx);
-	lua_setfield(L, LUA_REGISTRYINDEX, "skynet_context");
-	luaL_requiref(L, "skynet.codecache", codecache , 0);
-	lua_pop(L,1);
+	lua_setfield(L, LUA_REGISTRYINDEX, "LUA_NOENV"); // 注册表中的 "LUA_NOENV" 设为 true
 
+	luaL_openlibs(L);			// 打开L中的所有标准库
+
+	lua_pushlightuserdata(L, ctx);
+	lua_setfield(L, LUA_REGISTRYINDEX, "skynet_context"); // 注册表中的 "skynet_context" 设为 ctx
+	luaL_requiref(L, "skynet.codecache", codecache , 0);
+	lua_pop(L,1);	// 从栈中弹出一个元素
+
+	// 以下设置全局变量的值
 	const char *path = optstring(ctx, "lua_path","./lualib/?.lua;./lualib/?/init.lua");
 	lua_pushstring(L, path);
 	lua_setglobal(L, "LUA_PATH");
+
 	const char *cpath = optstring(ctx, "lua_cpath","./luaclib/?.so");
 	lua_pushstring(L, cpath);
 	lua_setglobal(L, "LUA_CPATH");
+
 	const char *service = optstring(ctx, "luaservice", "./service/?.lua");
 	lua_pushstring(L, service);
 	lua_setglobal(L, "LUA_SERVICE");
+
 	const char *preload = skynet_command(ctx, "GETENV", "preload");
 	lua_pushstring(L, preload);
 	lua_setglobal(L, "LUA_PRELOAD");
-
+	
 	lua_pushcfunction(L, traceback);
 	assert(lua_gettop(L) == 1);
 
 	const char * loader = optstring(ctx, "lualoader", "./lualib/loader.lua");
 
-	int r = luaL_loadfile(L,loader);
+	int r = luaL_loadfile(L,loader);	// 把 loader.lua 作为一个lua函数压到栈顶
 	if (r != LUA_OK) {
 		skynet_error(ctx, "Can't load %s : %s", loader, lua_tostring(L, -1));
 		report_launcher_error(ctx);
 		return 1;
 	}
 	lua_pushlstring(L, args, sz);
-	r = lua_pcall(L,1,0,1);
+	r = lua_pcall(L,1,0,1);				// 调用 loader.lua 生成的代码块
 	if (r != LUA_OK) {
 		skynet_error(ctx, "lua loader error : %s", lua_tostring(L, -1));
 		report_launcher_error(ctx);
@@ -136,8 +142,8 @@ static int
 launch_cb(struct skynet_context * context, void *ud, int type, int session, uint32_t source , const void * msg, size_t sz) {
 	assert(type == 0 && session == 0);
 	struct snlua *l = ud;
-	skynet_callback(context, NULL, NULL);
-	int err = init_cb(l, context, msg, sz);
+	skynet_callback(context, NULL, NULL);					// 将消息处理函数置空，以免别的消息发过来
+	int err = init_cb(l, context, msg, sz);					// 消息处理:通过 loader.lua 加载 lua 代码块
 	if (err) {
 		skynet_command(context, "EXIT", NULL);
 	}
@@ -150,12 +156,12 @@ snlua_init(struct snlua *l, struct skynet_context *ctx, const char * args) {
 	int sz = strlen(args);
 	char * tmp = skynet_malloc(sz);
 	memcpy(tmp, args, sz);
-	skynet_callback(ctx, l , launch_cb);
-	const char * self = skynet_command(ctx, "REG", NULL);
-	uint32_t handle_id = strtoul(self+1, NULL, 16);
+	skynet_callback(ctx, l , launch_cb);					// 注册消息处理函数
+	const char * self = skynet_command(ctx, "REG", NULL);	// 得到自身的服务的地址，是一个带冒号的字符串
+	uint32_t handle_id = strtoul(self+1, NULL, 16);			// 得到数字地址
 	// it must be first message
-	//直接发送消息，以便snlua能第一个加载bootstrap.lua
-	skynet_send(ctx, 0, handle_id, PTYPE_TAG_DONTCOPY,0, tmp, sz);
+	//直接发送消息，以便snlua能第一个加载 bootstrap.lua
+	skynet_send(ctx, 0, handle_id, PTYPE_TAG_DONTCOPY,0, tmp, sz);	// 发消息给自己 以便加载自身
 	return 0;
 }
 
