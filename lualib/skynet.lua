@@ -270,6 +270,7 @@ local function co_create(f)
 end
 
 -- 所有lua服务的消息处理函数(从定时器发过来的消息源地址(source)是 0) 这里的msg就是特定的数据结构体
+-- 这里的第一个参数 prototype 是同时支持 字符串与枚举类型索引的
 local function raw_dispatch_message(prototype, msg, sz, session, source)
 	-- skynet.PTYPE_RESPONSE = 1, read skynet.h
 	if prototype == 1 then 		-- 处理远端发送过来的返回值
@@ -438,7 +439,7 @@ skynet.trash = assert(c.trash)
 
 local function yield_call(service, session)
 	watching_session[session] = service
-	local succ, msg, sz = coroutine_yield("CALL", session)	--会让出到raw_dispatch_message中的第二个suspend函数中，即执行:suspend(true, "CALL", session)
+	local succ, msg, sz = coroutine_yield("CALL", session)	--会让出到 raw_dispatch_message 中的第二个suspend函数中，即执行:suspend(true, "CALL", session)
 	watching_session[session] = nil
 	if not succ then
 		error "call failed"

@@ -335,6 +335,7 @@ function socket.readline(id, sep)
 	end
 end
 
+-- 等待可读
 function socket.block(id)
 	local s = socket_pool[id]
 	if not s or not s.connected then

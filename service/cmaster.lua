@@ -28,6 +28,7 @@ local socket = require "socket"
 local slave_node = {}
 local global_name = {}
 
+-- 接受从网络过来的序列化后的包并将其反序列化后返回
 local function read_package(fd)
 	local sz = socket.read(fd, 1)
 	assert(sz, "closed")
@@ -36,6 +37,7 @@ local function read_package(fd)
 	return skynet.unpack(content)
 end
 
+-- 将序列化后的包发出去
 local function pack_package(...)
 	local message = skynet.packstring(...)
 	local size = #message
@@ -43,6 +45,8 @@ local function pack_package(...)
 	return string.char(size) .. message
 end
 
+-- 当有新slave连接上来时，返回一个确认包告诉这个slave说:你已经连接到master了。
+-- 并且通知其它slave说有哪个新slave已经连接上来了
 local function report_slave(fd, slave_id, slave_addr)
 	local message = pack_package("C", slave_id, slave_addr)
 	local n = 0

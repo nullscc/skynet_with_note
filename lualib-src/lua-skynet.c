@@ -77,6 +77,7 @@ static int
 forward_cb(struct skynet_context * context, void * ud, int type, int session, uint32_t source, const void * msg, size_t sz) {
 	_cb(context, ud, type, session, source, msg, sz);
 	// don't delete msg in forward mode.
+	// 在代理模式中让 ctx->cb 返回1，即不执行销毁 msg 的动作，因为此消息还要转发的。 让转发的目的服务去销毁这个内存
 	return 1;
 }
 
@@ -202,7 +203,7 @@ lsend(lua_State *L) {
 			msg = NULL;
 		}
 		if (dest_string) {	//如果是字符串地址
-			//skynet_sendname最终还是会调用skynet_send
+			//skynet_sendname 最终还是会调用 skynet_send
 			session = skynet_sendname(context, 0, dest_string, type, session , msg, len);
 		} else {	//如果是数字地址
 			session = skynet_send(context, 0, dest, type, session , msg, len);	

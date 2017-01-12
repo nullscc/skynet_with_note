@@ -1242,9 +1242,9 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 			continue;
 		}
 		switch (s->type) {
-		case SOCKET_TYPE_CONNECTING:
-			return report_connect(ss, s, result);
-		case SOCKET_TYPE_LISTEN: {	//listen完以后管道再接收一个"S"命令状态就变为SOCKET_TYPE_LISTEN了
+		case SOCKET_TYPE_CONNECTING:// 主动connect得到远端相应
+			return report_connect(ss, s, result);	// 正常的话描述符类型为 SOCKET_TYPE_CONNECTED
+		case SOCKET_TYPE_LISTEN: {	// listen完以后管道再接收一个"S"命令状态就变为SOCKET_TYPE_LISTEN了
 			int ok = report_accept(ss, s, result);
 			if (ok > 0) {	//accept成功后会大于0
 				return SOCKET_ACCEPT;		

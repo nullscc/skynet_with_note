@@ -338,7 +338,7 @@ send_remote(struct skynet_context * ctx, int fd, const char * buffer, size_t sz,
 	header_to_message(cookie, sendbuf+4+sz);
 
 	// ignore send error, because if the connection is broken, the mainloop will recv a message.
-	skynet_socket_send(ctx, fd, sendbuf, sz_header+4);
+	skynet_socket_send(ctx, fd, sendbuf, sz_header+4);	// 在这里发送一个 "D" 给本地管道，本地管道收到后 封装成网络包发出去
 }
 
 static void
@@ -483,6 +483,7 @@ push_socket_data(struct harbor *h, const struct skynet_socket_message * message)
 				return;
 			}
 			memcpy(s->recv_buffer + s->read, buffer, need);
+			// 分发到对应的服务上去
 			forward_local_messsage(h, s->recv_buffer, s->length);
 			s->length = 0;
 			s->read = 0;
@@ -518,7 +519,7 @@ static int
 remote_send_handle(struct harbor *h, uint32_t source, uint32_t destination, int type, int session, const char * msg, size_t sz) {
 	int harbor_id = destination >> HANDLE_REMOTE_SHIFT;
 	struct skynet_context * context = h->ctx;
-	if (harbor_id == h->id) {
+	if (harbor_id == h->id) {	// 如果是本地的服务
 		// local message
 		skynet_send(context, source, destination , type | PTYPE_TAG_DONTCOPY, session, (void *)msg, sz);
 		return 1;
@@ -592,7 +593,7 @@ harbor_command(struct harbor * h, const char * msg, size_t sz, int session, uint
 	int s = (int)sz;
 	s -= 2;
 	switch(msg[0]) {
-	case 'N' : {
+	case 'N' : {	// 新命名全局名字
 		if (s <=0 || s>= GLOBALNAME_LENGTH) {
 			skynet_error(h->ctx, "Invalid global name %s", name);
 			return;
@@ -604,8 +605,8 @@ harbor_command(struct harbor * h, const char * msg, size_t sz, int session, uint
 		update_name(h, rn.name, rn.handle);
 		break;
 	}
-	case 'S' :
-	case 'A' : {
+	case 'S' :		// 通知harbor:主动连接另外一个slave成功
+	case 'A' : {	// 通知harbor:接受另外一个slave连接成功
 		char buffer[s+1];
 		memcpy(buffer, name, s);
 		buffer[s] = 0;
@@ -654,7 +655,7 @@ static int
 mainloop(struct skynet_context * context, void * ud, int type, int session, uint32_t source, const void * msg, size_t sz) {
 	struct harbor * h = ud;
 	switch (type) {
-	case PTYPE_SOCKET: {
+	case PTYPE_SOCKET: {		// 收到远端 harbor 的消息
 		const struct skynet_socket_message * message = msg;
 		switch(message->type) {
 		case SKYNET_SOCKET_TYPE_DATA:
@@ -687,14 +688,14 @@ mainloop(struct skynet_context * context, void * ud, int type, int session, uint
 		}
 		return 0;
 	}
-	case PTYPE_HARBOR: {
+	case PTYPE_HARBOR: {	// 收到本地 slave 的命令
 		harbor_command(h, msg,sz,session,source);
 		return 0;
 	}
-	default: {
+	default: {		// 需要发送消息到远端 harbor 
 		// remote message out
 		const struct remote_message *rmsg = msg;
-		if (rmsg->destination.handle == 0) {
+		if (rmsg->destination.handle == 0) {	// 如果数字地址为0 即说明采用的是字符串地址
 			if (remote_send_name(h, source , rmsg->destination.name, type, session, rmsg->message, rmsg->sz)) {
 				return 0;
 			}

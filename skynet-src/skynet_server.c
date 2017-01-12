@@ -277,8 +277,8 @@ dispatch_message(struct skynet_context *ctx, struct skynet_message *msg) {
 	assert(ctx->init);
 	CHECKCALLING_BEGIN(ctx)
 	pthread_setspecific(G_NODE.handle_key, (void *)(uintptr_t)(ctx->handle));
-	int type = msg->sz >> MESSAGE_TYPE_SHIFT;
-	size_t sz = msg->sz & MESSAGE_TYPE_MASK;
+	int type = msg->sz >> MESSAGE_TYPE_SHIFT;	// 取出消息类型, 这里的 type 是最上层的 type，见 lualib-src/skynet.lua 中的 skynet table中的枚举
+	size_t sz = msg->sz & MESSAGE_TYPE_MASK;	// 取出消息大小，就是 msg->data 的大小
 	if (ctx->logfile) {
 		skynet_log_output(ctx->logfile, msg->source, type, msg->session, msg->data, sz);
 	}
@@ -669,6 +669,7 @@ skynet_command(struct skynet_context * context, const char * cmd , const char * 
 	return NULL;
 }
 
+// 这里的 type 是最上层的 type，见 lualib-src/skynet.lua 中的 skynet table中的枚举
 static void
 _filter_args(struct skynet_context * context, int type, int *session, void ** data, size_t * sz) {
 	int needcopy = !(type & PTYPE_TAG_DONTCOPY);
@@ -687,9 +688,10 @@ _filter_args(struct skynet_context * context, int type, int *session, void ** da
 		*data = msg;
 	}
 
-	*sz |= (size_t)type << MESSAGE_TYPE_SHIFT;
+	*sz |= (size_t)type << MESSAGE_TYPE_SHIFT;	// 类型封装在真正消息中的 sz 的高八位中
 }
 
+// 这里的 type 是最上层的 type，见 lualib-src/skynet.lua 中的 skynet table中的枚举
 int
 skynet_send(struct skynet_context * context, uint32_t source, uint32_t destination , int type, int session, void * data, size_t sz) {
 	if ((sz & MESSAGE_TYPE_MASK) != sz) {
@@ -699,6 +701,8 @@ skynet_send(struct skynet_context * context, uint32_t source, uint32_t destinati
 		}
 		return -1;
 	}
+
+	// 会将类型封装在真正消息中的 sz 的高八位中，并且分配 session
 	_filter_args(context, type, &session, (void **)&data, &sz);
 
 	if (source == 0) {
@@ -712,7 +716,7 @@ skynet_send(struct skynet_context * context, uint32_t source, uint32_t destinati
 		struct remote_message * rmsg = skynet_malloc(sizeof(*rmsg));
 		rmsg->destination.handle = destination;
 		rmsg->message = data;
-		rmsg->sz = sz;
+		rmsg->sz = sz;	// 等于skynet框架内的sz，即此消息的框架内的消息类型在高八位中
 		skynet_harbor_send(rmsg, source, session);
 	} else {	//如果目的地址是本节点的
 		struct skynet_message smsg;
