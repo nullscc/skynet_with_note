@@ -416,8 +416,8 @@ cmd_reg(struct skynet_context * context, const char * param) {
 	if (param == NULL || param[0] == '\0') { //如果不带参数，返回自身的地址
 		sprintf(context->result, ":%x", context->handle);
 		return context->result;
-	} else if (param[0] == '.') {	//如果带参数，去掉"."，注册全局名字
-		return skynet_handle_namehandle(context->handle, param + 1);	//注册全局名字
+	} else if (param[0] == '.') {	//如果带参数，去掉"."，注册本节点有效的全局名字
+		return skynet_handle_namehandle(context->handle, param + 1);	//注册本节点有效的全局名字
 	} else {
 		skynet_error(context, "Can't register global name %s in C", param);
 		return NULL;
@@ -427,7 +427,7 @@ cmd_reg(struct skynet_context * context, const char * param) {
 static const char *
 cmd_query(struct skynet_context * context, const char * param) {
 	if (param[0] == '.') {
-		uint32_t handle = skynet_handle_findname(param+1);	//查询全局名字服务对应的地址
+		uint32_t handle = skynet_handle_findname(param+1);	//查询本节点有效的全局名字服务对应的地址
 		if (handle) {
 			sprintf(context->result, ":%x", handle);
 			return context->result;

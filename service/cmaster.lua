@@ -77,7 +77,7 @@ end
 
 local function dispatch_slave(fd)
 	local t, name, address = read_package(fd)
-	if t == 'R' then
+	if t == 'R' then		-- 注册全局名字
 		-- register name
 		assert(type(address)=="number", "Invalid request")
 		if not global_name[name] then
@@ -85,7 +85,7 @@ local function dispatch_slave(fd)
 		end
 		local message = pack_package("N", name, address)
 		for k,v in pairs(slave_node) do
-			socket.write(v.fd, message)
+			socket.write(v.fd, message)	-- 向所有的 slave 节点广播 'N' 命令
 		end
 	elseif t == 'Q' then
 		-- query name

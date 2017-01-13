@@ -472,7 +472,7 @@ function skynet.ret(msg, sz)
 	-- 会让出到raw_dispatch_message函数的else分支中，参数给suspend,就成为:suspend(co, true, "RETURN", msg, sz)
 end
 
--- 与 skynet.ret 有异曲同工之用
+-- 与 skynet.ret 有异曲同工之用，区别是调用者可以选择何时进行返回
 -- 区别在于: 1. 可以提供打包函数(默认为skynet.pack) 2.调用者需要调用它返回的调用值(一个函数)并提供参数
 -- 共同之处在于一般都是在消息处理函数中进行调用
 function skynet.response(pack)

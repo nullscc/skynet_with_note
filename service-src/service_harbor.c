@@ -621,7 +621,7 @@ harbor_command(struct harbor * h, const char * msg, size_t sz, int session, uint
 			skynet_error(h->ctx, "Harbor %d alreay exist", id);
 			return;
 		}
-		slave->fd = fd;
+		slave->fd = fd;	// 将远端的套接字id记录起来
 
 		skynet_socket_start(h->ctx, fd);
 		handshake(h, id);

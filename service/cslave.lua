@@ -27,6 +27,7 @@ local function pack_package(...)
 	return string.char(size) .. message
 end
 
+-- 通知监控的相应的节点(新上线的/下线的)
 local function monitor_clear(id)
 	local v = monitor[id]
 	if v then
@@ -53,6 +54,7 @@ local function connect_slave(slave_id, address)
 	end
 end
 
+-- 与mater握手完毕 把握手完毕前等待的工作都做了
 local function ready()
 	local queue = connect_queue
 	connect_queue = nil
@@ -64,6 +66,7 @@ local function ready()
 	end
 end
 
+-- 用于此名字查询的被阻塞请求结果的返回
 local function response_name(name)
 	local address = globalname[name]
 	if queryname[name] then
@@ -79,19 +82,20 @@ local function monitor_master(master_fd)
 	while true do
 		local ok, t, id_name, address = pcall(read_package,master_fd)
 		if ok then
-			if t == 'C' then
-				if connect_queue then
+			if t == 'C' then	-- 当有新的 slave 连接上来时，主动连接(从这里可以看出 每个slave都是一一连接的)
+				if connect_queue then	
+				-- connect_queue 只是为了以防与mster连接还没完成的时候收到另外一个 slave，所以这里只是简单的记录下来，当准备好后再去连接这个slave
 					connect_queue[id_name] = address
 				else
-					connect_slave(id_name, address)
+					connect_slave(id_name, address)	-- 如果已经准备好了，立即连接即可
 				end
-			elseif t == 'N' then
-				globalname[id_name] = address
-				response_name(id_name)
-				if connect_queue == nil then
+			elseif t == 'N' then	-- 收到master的从另外 slave 过来的注册新名字的通知
+				globalname[id_name] = address	-- 缓存住全局名字
+				response_name(id_name)			-- 用于此名字查询的被阻塞请求结果的返回
+				if connect_queue == nil then	-- 如果已经准备好了，就给harbor服务发消息，让harbor服务记录下这个地址
 					skynet.redirect(harbor_service, address, "harbor", 0, "N " .. id_name)
 				end
-			elseif t == 'D' then
+			elseif t == 'D' then			-- slave挂掉了/下线了
 				local fd = slaves[id_name]
 				slaves[id_name] = false
 				if fd then
@@ -169,14 +173,16 @@ local function monitor_harbor(master_fd)
 	end
 end
 
+-- fd 为 master 服务对应的描述符 id
 function harbor.REGISTER(fd, name, handle)
 	assert(globalname[name] == nil)
-	globalname[name] = handle
-	response_name(name)
-	socket.write(fd, pack_package("R", name, handle))
-	skynet.redirect(harbor_service, handle, "harbor", 0, "N " .. name)
+	globalname[name] = handle	-- 在 slave 服务中缓存住这个全节点有效的名字
+	response_name(name)			-- 检查是否有此名字查询的请求阻塞在这里，如果有:返回
+	socket.write(fd, pack_package("R", name, handle))	-- 发消息给 master 说:自己要注册这个名字， 然后由 master 将此请求转发给所有 slave
+	skynet.redirect(harbor_service, handle, "harbor", 0, "N " .. name)	-- 发消息给 harbor 服务说:我注册这个名字，以便被查找
 end
 
+-- 阻塞监控 某个 slave 是否断开，当slave断开，则返回
 function harbor.LINK(fd, id)
 	if slaves[id] then
 		if monitor[id] == nil then
@@ -188,10 +194,12 @@ function harbor.LINK(fd, id)
 	end
 end
 
+-- 阻塞的监控 master，当 master 断开时才返回
 function harbor.LINKMASTER()
 	table.insert(monitor_master_set, skynet.response())
 end
 
+-- 阻塞的等待一个 slave 连接上来 ，如果slave已连接，则直接返回，如果未连接，则等连接连上来后再返回
 function harbor.CONNECT(fd, id)
 	if not slaves[id] then
 		if monitor[id] == nil then
@@ -203,22 +211,23 @@ function harbor.CONNECT(fd, id)
 	end
 end
 
+-- 阻塞的查询全局名字或本地名字对应的服务地址，如果查不到则一直等到这个名字注册上来
 function harbor.QUERYNAME(fd, name)
-	if name:byte() == 46 then	-- "." , local name
+	if name:byte() == 46 then	-- "." , local name 如果是本节点的服务名字，就直接返回地址
 		skynet.ret(skynet.pack(skynet.localname(name)))
 		return
 	end
-	local result = globalname[name]
+	local result = globalname[name]	-- 如果已经缓存过(是此节点的服务)，也直接返回
 	if result then
 		skynet.ret(skynet.pack(result))
 		return
 	end
 	local queue = queryname[name]
-	if queue == nil then
+	if queue == nil then	-- 如果为空 说明此名字还没查询过
 		socket.write(fd, pack_package("Q", name))
 		queue = { skynet.response() }
 		queryname[name] = queue
-	else
+	else					-- 如果不为空 说明此名字已经查询过 但是由于某种原因还没返回(还没注册、slave还没连接上来) 将其加入队列 等注册上来后再返回
 		table.insert(queue, skynet.response())
 	end
 end
