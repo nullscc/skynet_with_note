@@ -160,8 +160,8 @@ snlua_init(struct snlua *l, struct skynet_context *ctx, const char * args) {
 	const char * self = skynet_command(ctx, "REG", NULL);	// 得到自身的服务的地址，是一个带冒号的字符串
 	uint32_t handle_id = strtoul(self+1, NULL, 16);			// 得到数字地址
 	// it must be first message
-	//直接发送消息，以便snlua能第一个加载 bootstrap.lua
-	skynet_send(ctx, 0, handle_id, PTYPE_TAG_DONTCOPY,0, tmp, sz);	// 发消息给自己 以便加载自身
+	//直接发送消息，以便snlua能第一个加载 相应的服务
+	skynet_send(ctx, 0, handle_id, PTYPE_TAG_DONTCOPY,0, tmp, sz);	// 发消息给自己以便加载相应的服务模块
 	return 0;
 }
 

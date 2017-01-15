@@ -560,10 +560,10 @@ function skynet.dispatch_message(...)
 end
 
 function skynet.newservice(name, ...)
-	return skynet.call(".launcher", "lua" , "LAUNCH", "snlua", name, ...)
+	return skynet.call(".launcher", "lua" , "LAUNCH", "snlua", name, ...)	-- launcher 就是 launcher.lua
 end
 
-function skynet.uniqueservice(global, ...)
+function skynet.uniqueservice(global, ...)  -- .service 为 service_mgr
 	if global == true then
 		return assert(skynet.call(".service", "lua", "GLAUNCH", ...))
 	else
