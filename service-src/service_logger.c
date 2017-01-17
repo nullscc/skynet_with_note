@@ -68,7 +68,7 @@ logger_init(struct logger * inst, struct skynet_context *ctx, const char * parm)
 		skynet_callback(ctx, inst, logger_cb);
 
 		//在C中为服务注册一个全局的名字"logger",注册时必须以"."开头
-		skynet_command(ctx, "REG", ".logger");
+		skynet_command(ctx, "REG", ".logger");	// 为 logger 服务注册一个本节点有效的字符串地址
 		return 0;
 	}
 	return 1;

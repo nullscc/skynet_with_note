@@ -19,11 +19,11 @@
 typedef void (*timer_execute_func)(void *ud,void *arg);
 
 #define TIME_NEAR_SHIFT 8
-#define TIME_NEAR (1 << TIME_NEAR_SHIFT)
+#define TIME_NEAR (1 << TIME_NEAR_SHIFT)	// 256(0xff + 1)
 #define TIME_LEVEL_SHIFT 6
-#define TIME_LEVEL (1 << TIME_LEVEL_SHIFT)
-#define TIME_NEAR_MASK (TIME_NEAR-1)
-#define TIME_LEVEL_MASK (TIME_LEVEL-1)
+#define TIME_LEVEL (1 << TIME_LEVEL_SHIFT)	// 64(ox3f+1)
+#define TIME_NEAR_MASK (TIME_NEAR-1)		// 255(0xff)
+#define TIME_LEVEL_MASK (TIME_LEVEL-1)		// 63(0x3f)
 
 /*
 	struct timer_event是挨着struct timer_node分配的
@@ -45,7 +45,6 @@ struct link_list {
 	struct timer_node *tail;
 };
 
-
 struct timer {
 /***********************************
 * 链表数组，0-255个粒度注册的定时器都是在这里的
@@ -55,6 +54,7 @@ struct timer {
 /***********************************
 * 4个层级：每个层级都有64个对应的时间点
 * t[i]表示如果注册的时间粒度超过了64^i * 256但是不超过 64^(i+1) * 256，则将其放在t[i]的链表下
+* 所以最大的定时器时间应该是 (64*64*64*64*256) 1/100秒 (64*64*64*64*256)恰好为2^32
 ***********************************/
 	struct link_list t[4][TIME_LEVEL];
 	struct spinlock lock;
@@ -76,7 +76,7 @@ link_clear(struct link_list *list) {
 	return ret;
 }
 
-//将struct timer_node挂载在某个链表下
+//将struct timer_node 挂载在某个链表下
 static inline void
 link(struct link_list *list,struct timer_node *node) {
 	list->tail->next = node;
@@ -93,13 +93,13 @@ x & 0xff的值在0到255循环
 ((time & 0xff)==0):的意义在于如果time是2^8的整数倍(当然：包括time=0),则等式成立
 ***********************************/
 
-//将struct timer_node加入到定时器管理结构，方便到时间后取出相应的事件
+//将struct timer_node 加入到定时器管理结构，方便到时间后取出相应的事件
 static void
 add_node(struct timer *T,struct timer_node *node) {
 	uint32_t time=node->expire;
 	uint32_t current_time=T->time;
 	
-	if ((time|TIME_NEAR_MASK)==(current_time|TIME_NEAR_MASK)) {
+	if ((time|TIME_NEAR_MASK)==(current_time|TIME_NEAR_MASK)) {	// TIME_NEAR_MASK 为 0xff, 如果超时时间与当前时间差值小于256就将其挂在near层级的粒度下
 		link(&T->near[time&TIME_NEAR_MASK],node);
 	} else {
 		int i;

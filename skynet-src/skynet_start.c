@@ -274,7 +274,7 @@ skynet_start(struct skynet_config * config) {
 	skynet_socket_init();
 
 	//创建第一个服务:logger(由于错误消息都是从logger服务写到相应的文件描述符的，所以需要先启动logger服务)
-	struct skynet_context *ctx = skynet_context_new(config->logservice, config->logger);
+	struct skynet_context *ctx = skynet_context_new(config->logservice, config->logger);	-- config.logservice 为 "logger" config->logger为要写入的log的路径(可无)
 	if (ctx == NULL) {
 		fprintf(stderr, "Can't launch %s service\n", config->logservice);
 		exit(1);

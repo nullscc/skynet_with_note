@@ -133,7 +133,7 @@ skynet_context_new(const char * name, const char *param) {
 		return NULL;
 
 	//如果动态库的 xxx_create 函数存在，就调用它返回一个 inst ,一个 inst 就是那个 动态库/C服务 特有的结构体指针
-	void *inst = skynet_module_instance_create(mod);
+	void *inst = skynet_module_instance_create(mod);	// 调用C模块的 xxx_create 函数
 	if (inst == NULL)
 		return NULL;
 
