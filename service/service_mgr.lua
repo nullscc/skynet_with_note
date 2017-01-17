@@ -15,7 +15,7 @@ local function request(name, func, ...)
 		service[name] = tostring(handle)
 	end
 
-	for _,v in ipairs(s) do
+	for _,v in ipairs(s) do		-- 唤醒阻塞的协程
 		skynet.wakeup(v)
 	end
 
@@ -26,9 +26,11 @@ local function request(name, func, ...)
 	end
 end
 
+-- 惰性初始化的体现
+-- 如果是首次调用会直接返回
 local function waitfor(name , func, ...)
 	local s = service[name]
-	if type(s) == "number" then
+	if type(s) == "number" then	-- 如果已经有了，就直接返回
 		return s
 	end
 	local co = coroutine.running()
@@ -42,12 +44,12 @@ local function waitfor(name , func, ...)
 
 	assert(type(s) == "table")
 
-	if not s.launch and func then
+	if not s.launch and func then	-- 如果是首次调用,可以直接返回
 		s.launch = true
 		return request(name, func, ...)
 	end
 
-	table.insert(s, co)
+	table.insert(s, co)				-- 后续的调用都需要阻塞在这里
 	skynet.wait()
 	s = service[name]
 	if type(s) == "string" then
@@ -102,7 +104,7 @@ local function list_service()
 	return result
 end
 
-
+-- 单节点模式、多节点中的主节点
 local function register_global()
 	function cmd.GLAUNCH(name, ...)
 		local global_name = "@" .. name
@@ -141,6 +143,7 @@ local function register_global()
 	end
 end
 
+-- 多节点中的非主节点
 local function register_local()
 	local function waitfor_remote(cmd, name, ...)
 		local global_name = "@" .. name
@@ -191,10 +194,10 @@ skynet.start(function()
 	else
 		skynet.register(".service")
 	end
-	if skynet.getenv "standalone" then --如果是主节点
+	if skynet.getenv "standalone" then 	-- 主节点,单节点模式
 		skynet.register("SERVICE")
 		register_global()
-	else
+	else								-- 多节点模式中的非主节点
 		register_local()
 	end
 end)

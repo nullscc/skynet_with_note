@@ -164,6 +164,8 @@ skynet.register_protocol {
 	end
 }
 
+-- 初始化 buffer，创建 socket_pool 对应的 id 结构
+-- 会阻塞，然后等相应的动作完成后才能返回
 local function connect(id, func)
 	local newbuffer
 	if func == nil then
@@ -171,12 +173,14 @@ local function connect(id, func)
 	end
 	local s = {
 		id = id,
-		buffer = newbuffer,
+		buffer = newbuffer,		
+		-- 缓冲区(此socket库的实现原理是:远端发送消息过来，会收到数据，收到数据以后将数据全部储存在此buffer中，如果需要读取，则直接从此缓冲区中读取即可)
+
 		connected = false,
 		connecting = true,
 		read_required = false,
 		co = false,
-		callback = func,
+		callback = func,		-- 主动监听的一方如果被远端连接了，那么调用此函数(参数为 (已连接描述符 "远端ip:端口"))
 		protocol = "TCP",
 	}
 	assert(not socket_pool[id], "socket is not closed")
@@ -192,11 +196,14 @@ local function connect(id, func)
 	end
 end
 
+-- 主动连接
 function socket.open(addr, port)
-	local id = driver.connect(addr,port)
+	local id = driver.connect(addr,port)	
+	-- 此函数在底层会向管道发送一个 'O' 的命令，管道的读端收到 'O' 后会调用 connect 函数主动与远端建立起连接
 	return connect(id)
 end
 
+-- 将操作系统的句柄交给底层的 epoll来管理，有数据来了也走 socket 那一套
 function socket.bind(os_fd)
 	local id = driver.bind(os_fd)
 	return connect(id)
@@ -206,6 +213,7 @@ function socket.stdin()
 	return socket.bind(0)
 end
 
+-- 一般是主动监听的一端在调用 socket.listen 后调用此函数
 function socket.start(id, func)
 	driver.start(id)
 	return connect(id, func)
@@ -232,6 +240,7 @@ function socket.close_fd(id)
 	driver.close(id)
 end
 
+-- 关闭 socket 连接
 function socket.close(id)
 	local s = socket_pool[id]
 	if s == nil then
@@ -257,6 +266,8 @@ function socket.close(id)
 	socket_pool[id] = nil
 end
 
+-- 阻塞的从缓冲区中读取 sz 个字节的数据
+-- 如果 sz 为 nil ，那么读取尽可能多得数据
 function socket.read(id, sz)
 	local s = socket_pool[id]
 	assert(s)
@@ -300,6 +311,7 @@ function socket.read(id, sz)
 	end
 end
 
+-- 从缓冲区中读取尽可能多得数据
 function socket.readall(id)
 	local s = socket_pool[id]
 	assert(s)
@@ -314,6 +326,7 @@ function socket.readall(id)
 	return driver.readall(s.buffer, buffer_pool)
 end
 
+-- 从缓冲区中读取一行数据
 function socket.readline(id, sep)
 	sep = sep or "\n"
 	local s = socket_pool[id]
@@ -335,7 +348,7 @@ function socket.readline(id, sep)
 	end
 end
 
--- 等待可读
+-- 等待缓冲区区中有数据
 function socket.block(id)
 	local s = socket_pool[id]
 	if not s or not s.connected then
@@ -355,12 +368,15 @@ function socket.invalid(id)
 	return socket_pool[id] == nil
 end
 
+-- 监听一个地址与端口，等待远端连接过来，此函数一般与 socket.start(id, func) 配合使用
+-- 其中 socket.start 第一个参数为监听描述符，第二个参数为一个函数，函数的参数为:(已连接描述符 "远端地址:端口")
 function socket.listen(host, port, backlog)
 	if port == nil then
 		host, port = string.match(host, "([^:]+):(.+)$")
 		port = tonumber(port)
 	end
 	return driver.listen(host, port, backlog)
+	-- 此函数底层的动作为:给管道发送一个 'L' 命令，调用 bing listen 函数
 end
 
 function socket.lock(id)
@@ -393,6 +409,7 @@ end
 
 -- abandon use to forward socket id to other service
 -- you must call socket.start(id) later in other service
+-- 此函数作用为:调用此 socket 库的服务不再接收此id发过来的socket消息，需要做的是要尽快在别的服务调用 socket.start 以便能接受到数据
 function socket.abandon(id)
 	local s = socket_pool[id]
 	if s and s.buffer then
@@ -401,6 +418,7 @@ function socket.abandon(id)
 	socket_pool[id] = nil
 end
 
+-- 设置缓冲区的大小，如果不设置，则缓冲区大小应该是不做限制的
 function socket.limit(id, limit)
 	local s = assert(socket_pool[id])
 	s.buffer_limit = limit

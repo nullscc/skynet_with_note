@@ -5,6 +5,7 @@ local database = {}
 local wait_queue = {}
 local mode = {}
 
+-- 查询叶子节点
 local function query(db, key, ...)
 	if key == nil then
 		return db
@@ -13,6 +14,7 @@ local function query(db, key, ...)
 	end
 end
 
+-- 查询树
 function command.QUERY(key, ...)
 	local d = database[key]
 	if d then
@@ -20,6 +22,7 @@ function command.QUERY(key, ...)
 	end
 end
 
+-- 更新树的值
 local function update(db, key, value, ...)
 	if select("#",...) == 0 then
 		local ret = db[key]
@@ -33,6 +36,7 @@ local function update(db, key, value, ...)
 	end
 end
 
+-- 唤醒等待的叶节点(但是不能唤醒分支)
 local function wakeup(db, key1, ...)
 	if key1 == nil then
 		return
@@ -57,19 +61,22 @@ local function wakeup(db, key1, ...)
 	end
 end
 
+-- 更新树的值
 function command.UPDATE(...)
 	local ret, value = update(database, ...)
 	if ret or value == nil then
 		return ret
 	end
-	local q = wakeup(wait_queue, ...)
+	local q = wakeup(wait_queue, ...)	-- 看此次更新的值是不是有等待队列在，如果有，取出闭包，返回值
 	if q then
-		for _, response in ipairs(q) do
+		for _, response in ipairs(q) do	-- 注意这里是用ipairs，它保证会将 key 为 "mode" 的值迭代出来
 			response(true,value)
 		end
 	end
 end
 
+-- 等待有值更新
+-- 此函数用来当 command.QUERY 得到一个 nil 值时，等待有人更新它(调用skynet.response()生成一个闭包)
 local function waitfor(db, key1, key2, ...)
 	if key2 == nil then
 		-- push queue

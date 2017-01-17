@@ -94,7 +94,7 @@ lnewbuffer(lua_State *L) {
 	lpopbuffer return the struct buffer_node back to table pool (By calling return_free_node).
  */
 static int
-lpushbuffer(lua_State *L) {
+lpushbuffer(lua_State *L) {		// (s.buffer, buffer_pool, data, size)
 	struct socket_buffer *sb = lua_touserdata(L,1);
 	if (sb == NULL) {
 		return luaL_error(L, "need buffer object at param 1");
