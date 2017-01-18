@@ -9,7 +9,7 @@ local node_session = {}
 local command = {}
 
 local function read_response(sock)
-	local sz = socket.header(sock:read(2))
+	local sz = socket.header(sock:read(2))	-- sock:read(2)为读取前两个字节 socket.header(sock:read(2))为得到前两个字节表示的 number 类型的值
 	local msg = sock:read(sz)
 	return cluster.unpackresponse(msg)	-- session, ok, data, padding
 end
@@ -64,6 +64,8 @@ end
 local function send_request(source, node, addr, msg, sz)
 	local session = node_session[node] or 1
 	-- msg is a local pointer, cluster.packrequest will free it
+	-- request 为前面10个字节[(sz+9)、0(0x80, 0x81)、addr(int32)、session(int32)]加上msg组成的字符串
+	-- session 会自增1
 	local request, new_session, padding = cluster.packrequest(addr, session, msg, sz)
 	node_session[node] = new_session
 
@@ -114,6 +116,7 @@ end
 
 local large_request = {}
 
+-- 供主动监听的一方接收 gate 服务发过来的消息使用
 function command.socket(source, subcmd, fd, msg)
 	if subcmd == "data" then
 		local sz

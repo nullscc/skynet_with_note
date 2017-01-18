@@ -25,20 +25,22 @@ socket_channel.error = socket_error
 
 function socket_channel.channel(desc)
 	local c = {
-		__host = assert(desc.host),
-		__port = assert(desc.port),
-		__backup = desc.backup,
-		__auth = desc.auth,
-		__response = desc.response,	-- It's for session mode
-		__request = {},	-- request seq { response func or session }	-- It's for order mode
-		__thread = {}, -- coroutine seq or session->coroutine map
-		__result = {}, -- response result { coroutine -> result }
-		__result_data = {},
-		__connecting = {},
-		__sock = false,
-		__closed = false,
-		__authcoroutine = false,
-		__nodelay = desc.nodelay,
+		__host = assert(desc.host),	-- ip地址
+		__port = assert(desc.port),	-- 端口
+		__backup = desc.backup,		-- 备用地址(成员需有一个或多个{host=xxx, port=xxx})
+		__auth = desc.auth,			-- 认证函数
+		__response = desc.response,	-- It's for session mode 如果是session模式，则需要提供此函数
+		__request = {},	-- request seq { response func or session }	-- It's for order mode -- 消息处理函数，成员为函数
+		__thread = {}, -- coroutine seq or session->coroutine map	-- 存储等待回应的协程
+		__result = {}, -- response result { coroutine -> result }	-- 存储返回的结果，以便唤醒的时候能从对应的协程里面拿出
+		__result_data = {},											-- 存储返回的结果，以便唤醒的时候能从对应的协程里面拿出
+		__connecting = {},	-- 用于储存等待完成的队列，队列的成员为协程:co
+		__sock = false,		-- 连接成功以后是一个 table，第一次元素为 fd，元表为 channel_socket_meta
+		__closed = false,	-- 是否已经关闭
+		__authcoroutine = false,	-- 如果存在 __auth,那么这里存储的是认证过程的协程
+		__nodelay = desc.nodelay,	-- 配置是否启用 TCP 的 Nagle 算法
+		-- __dispatch_thread 消息处理函数的协程co
+		-- __connecting_thread 等待连接完成的协程
 	}
 
 	return setmetatable(c, channel_meta)
@@ -88,6 +90,7 @@ local function exit_thread(self)
 	end
 end
 
+-- session 模式下的
 local function dispatch_by_session(self)
 	local response = self.__response
 	-- response() return session
@@ -153,6 +156,7 @@ local function push_response(self, response, co)
 	end
 end
 
+-- 此函数由TCP保证时序，一个请求一个回应，相当于一个维护了一个请求队列，先到先处理，先返回
 local function dispatch_by_order(self)
 	while self.__sock do
 		local func, co = pop_response(self)
@@ -193,8 +197,9 @@ local function dispatch_by_order(self)
 	exit_thread(self)
 end
 
+-- 可以看作是 远端socket 的消息处理函数
 local function dispatch_function(self)
-	if self.__response then
+	if self.__response then		-- 如果 __response 存在，则是 session 模式
 		return dispatch_by_session
 	else
 		return dispatch_by_order
@@ -222,13 +227,17 @@ local function connect_backup(self)
 	end
 end
 
+-- 与远端建立连接
+-- 如果连接不成功尝试备用地址
+-- 设置消息处理函数
+-- 如果存在 __auth 启用验证流程
 local function connect_once(self)
 	if self.__closed then
 		return false
 	end
 	assert(not self.__sock and not self.__authcoroutine)
 	local fd,err = socket.open(self.__host, self.__port)
-	if not fd then
+	if not fd then	-- 如果连接不成功，连接备用的地址
 		fd = connect_backup(self)
 		if not fd then
 			return false, err
@@ -262,6 +271,7 @@ local function connect_once(self)
 	return true
 end
 
+-- 尝试连接，如果没有明确指定只连接一次，那么一直尝试重连
 local function try_connect(self , once)
 	local t = 0
 	while not self.__closed do
@@ -276,7 +286,7 @@ local function try_connect(self , once)
 		else
 			skynet.error("socket: connect", err)
 		end
-		if t > 1000 then
+		if t > 1000 then	-- 如果 once 不为真，则一直尝试连接
 			skynet.error("socket: try to reconnect", self.__host, self.__port)
 			skynet.sleep(t)
 			t = 0
@@ -287,6 +297,7 @@ local function try_connect(self , once)
 	end
 end
 
+-- 检查是不是已经连接上了，如果返回nil则代表没有连接上
 local function check_connection(self)
 	if self.__sock then
 		local authco = self.__authcoroutine
@@ -303,6 +314,7 @@ local function check_connection(self)
 	end
 end
 
+-- 阻塞的连接(阻塞只是一个协程)
 local function block_connect(self, once)
 	local r = check_connection(self)
 	if r ~= nil then
@@ -310,12 +322,13 @@ local function block_connect(self, once)
 	end
 	local err
 
+	-- 如果正在等待连接完成的队列大于0，则将当前协程加入队列
 	if #self.__connecting > 0 then
 		-- connecting in other coroutine
 		local co = coroutine.running()
 		table.insert(self.__connecting, co)
 		skynet.wait(co)
-	else
+	else	-- 尝试连接，如果连接成功，依次唤醒等待连接完成的队列
 		self.__connecting[1] = true
 		err = try_connect(self, once)
 		self.__connecting[1] = nil
@@ -335,6 +348,7 @@ local function block_connect(self, once)
 	end
 end
 
+-- 这里的 once 如果为真就只取连接一次(不管失败还是成功都只尝试一次连接)， 如果不为真就一直尝试连接
 function channel:connect(once)
 	if self.__closed then
 		if self.__dispatch_thread then
@@ -376,6 +390,7 @@ end
 local socket_write = socket.write
 local socket_lwrite = socket.lwrite
 
+-- 向远端发送一个请求包，如果 response 为空，则单向请求，不需要一个接收包
 function channel:request(request, response, padding)
 	assert(block_connect(self, true))	-- connect once
 	local fd = self.__sock[1]
@@ -404,6 +419,13 @@ function channel:request(request, response, padding)
 	return wait_for_response(self, response)
 end
 
+-- 阻塞的接收一个包
+-- channel:request(req)
+-- local resp = channel:response(dispatch)
+
+-- -- 等价于
+
+-- local resp = channel:request(req, dispatch)
 function channel:response(response)
 	assert(block_connect(self))
 
@@ -432,6 +454,7 @@ function channel:changehost(host, port)
 	end
 end
 
+-- 更改备用地址
 function channel:changebackup(backup)
 	self.__backup = backup
 end
