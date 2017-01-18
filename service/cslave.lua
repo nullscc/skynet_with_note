@@ -199,7 +199,7 @@ function harbor.LINKMASTER()
 	table.insert(monitor_master_set, skynet.response())
 end
 
--- 阻塞的等待一个 slave 连接上来 ，如果slave已连接，则直接返回，如果未连接，则等连接连上来后再返回
+-- 阻塞的等待一个 slave 连接上来，如果slave已连接，则直接返回，如果未连接，则等连接连上来后再返回
 function harbor.CONNECT(fd, id)
 	if not slaves[id] then
 		if monitor[id] == nil then
@@ -233,31 +233,50 @@ function harbor.QUERYNAME(fd, name)
 end
 
 skynet.start(function()
+	-- 得到中心节点的地址
 	local master_addr = skynet.getenv "master"
+
+	-- 得到 harbor id
 	local harbor_id = tonumber(skynet.getenv "harbor")
+
+	-- 得到本节点的地址
 	local slave_address = assert(skynet.getenv "address")
+
+	-- 监听本节点
 	local slave_fd = socket.listen(slave_address)
 	skynet.error("slave connect to master " .. tostring(master_addr))
+
+	-- 连接 master 节点
 	local master_fd = assert(socket.open(master_addr), "Can't connect to master")
 
+	-- 注册消息处理函数，用于处理本地请求
 	skynet.dispatch("lua", function (_,_,command,...)
 		local f = assert(harbor[command])
 		f(master_fd, ...)
 	end)
+
 	skynet.dispatch("text", monitor_harbor(master_fd))
 
+	-- 启动 harbor 服务
 	harbor_service = assert(skynet.launch("harbor", harbor_id, skynet.self()))
 
+	-- 发送一个 "H" 消息，告诉master:hi, gay!我连接上来了，并且告诉 master:harbor id 和 节点地址
 	local hs_message = pack_package("H", harbor_id, slave_address)
 	socket.write(master_fd, hs_message)
+
+	-- 远端节点会告诉你有多少个节点已经连接上来了，待会他们会来连接你的
 	local t, n = read_package(master_fd)
 	assert(t == "W" and type(n) == "number", "slave shakehand failed")
 	skynet.error(string.format("Waiting for %d harbors", n))
+
+	-- 开辟一个协程，用于处理中心节点过来的网络包
 	skynet.fork(monitor_master, master_fd)
 	if n > 0 then
 		local co = coroutine.running()
 		socket.start(slave_fd, function(fd, addr)
 			skynet.error(string.format("New connection (fd = %d, %s)",fd, addr))
+
+			-- 与已连接的老前辈slave 一一建立连接
 			if pcall(accept_slave,fd) then
 				local s = 0
 				for k,v in pairs(slaves) do

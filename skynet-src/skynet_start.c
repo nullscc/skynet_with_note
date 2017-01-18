@@ -266,7 +266,7 @@ skynet_start(struct skynet_config * config) {
 			exit(1);
 		}
 	}
-	skynet_harbor_init(config->harbor);
+	skynet_harbor_init(config->harbor);			// 初始化 harbor id，用来后续判断是否是非本节点的服务地址
 	skynet_handle_init(config->harbor);
 	skynet_mq_init();
 	skynet_module_init(config->module_path);	// module_path 为C服务的路径
