@@ -223,6 +223,7 @@ close_uncomplete(lua_State *L, int fd) {
 	}
 }
 
+// filter_data_就是解protobuf/sproto包的过程
 static int
 filter_data_(lua_State *L, int fd, uint8_t * buffer, int size) {
 	struct queue *q = lua_touserdata(L,1);
@@ -295,7 +296,7 @@ filter_data_(lua_State *L, int fd, uint8_t * buffer, int size) {
 			memcpy(result, buffer, size);
 			lua_pushlightuserdata(L, result);
 			lua_pushinteger(L, size);
-			return 5;
+			return 5;	// queue 'data' 'fd' 'msg' 'sz'
 		}
 		// more data
 		push_data(L, fd, buffer, pack_size, 1);

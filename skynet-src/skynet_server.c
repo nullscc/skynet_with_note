@@ -712,7 +712,7 @@ skynet_send(struct skynet_context * context, uint32_t source, uint32_t destinati
 	if (destination == 0) {
 		return session;
 	}
-	if (skynet_harbor_message_isremote(destination)) { //如果目的地址不是本节点的
+	if (skynet_harbor_message_isremote(destination)) { //如果目的地址不是本节点的(通过地址的高八位来判断)
 		struct remote_message * rmsg = skynet_malloc(sizeof(*rmsg));
 		rmsg->destination.handle = destination;
 		rmsg->message = data;

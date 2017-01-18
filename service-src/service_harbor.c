@@ -560,7 +560,7 @@ remote_send_name(struct harbor *h, uint32_t source, const char name[GLOBALNAME_L
 	if (node == NULL) {
 		node = hash_insert(h->map, name);
 	}
-	if (node->value == 0) {
+	if (node->value == 0) {		// 如果harbor服务没有缓存这个字符串地址(可能是注册字符串地址的'N'命令还没发过来)
 		if (node->queue == NULL) {
 			node->queue = new_queue();
 		}
@@ -568,11 +568,11 @@ remote_send_name(struct harbor *h, uint32_t source, const char name[GLOBALNAME_L
 		header.source = source;
 		header.destination = type << HANDLE_REMOTE_SHIFT;
 		header.session = (uint32_t)session;
-		push_queue(node->queue, (void *)msg, sz, &header);
-		char query[2+GLOBALNAME_LENGTH+1] = "Q ";
+		push_queue(node->queue, (void *)msg, sz, &header);	// 把这个消息加入到队列中，等待后续处理(将来收到'Q'命令的响应会pop_queue，然后继续将消息转发出去)
+		char query[2+GLOBALNAME_LENGTH+1] = "Q ";	
 		query[2+GLOBALNAME_LENGTH] = 0;
 		memcpy(query+2, name, GLOBALNAME_LENGTH);
-		skynet_send(h->ctx, 0, h->slave, PTYPE_TEXT, 0, query, strlen(query));
+		skynet_send(h->ctx, 0, h->slave, PTYPE_TEXT, 0, query, strlen(query)); // 那么发送一个"Q"给 cslave 服务
 		return 1;
 	} else {
 		return remote_send_handle(h, source, node->value, type, session, msg, sz);

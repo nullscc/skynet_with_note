@@ -23,8 +23,8 @@
 #define MIN_READ_BUFFER 64
 #define SOCKET_TYPE_INVALID 0 		//初始时的状态
 #define SOCKET_TYPE_RESERVE 1
-#define SOCKET_TYPE_PLISTEN 2 		//监听已经完成
-#define SOCKET_TYPE_LISTEN 3 		
+#define SOCKET_TYPE_PLISTEN 2 		//监听准备工作完成
+#define SOCKET_TYPE_LISTEN 3 		//正在监听过程中
 #define SOCKET_TYPE_CONNECTING 4 	//套接字正在进行三路握手
 #define SOCKET_TYPE_CONNECTED 5 	//套接字三路握手已完成
 #define SOCKET_TYPE_HALFCLOSE 6
@@ -300,7 +300,7 @@ socket_server_create() {
 	ss->sendctrl_fd = fd[1];	//管道的写入端
 	ss->checkctrl = 1;			//控制是否去检查本地从管道写过来的请求
 
-	for (i=0;i<MAX_SOCKET;i++) {
+	for (i=0;i<MAX_SOCKET;i++) {			// MAX_SOCKET为65536
 		struct socket *s = &ss->slot[i];	//ss->slot[i]为一个struct socket
 		s->type = SOCKET_TYPE_INVALID;
 		clear_wb_list(&s->high);
@@ -1236,7 +1236,7 @@ socket_server_poll(struct socket_server *ss, struct socket_message * result, int
 			}
 		}
 		struct event *e = &ss->ev[ss->event_index++];
-		struct socket *s = e->s;
+		struct socket *s = e->s;	// 取出自定义数据
 		if (s == NULL) {
 			// dispatch pipe message at beginning
 			continue;
@@ -1473,7 +1473,7 @@ socket_server_listen(struct socket_server *ss, uintptr_t opaque, const char * ad
 		return -1;
 	}
 	struct request_package request;
-	int id = reserve_id(ss);
+	int id = reserve_id(ss);	//为此socket描述符分配一个id给上层使用
 	if (id < 0) {
 		close(fd);
 		return id;
