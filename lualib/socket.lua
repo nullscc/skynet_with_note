@@ -47,8 +47,9 @@ socket_message[1] = function(id, size, data)
 		driver.drop(data, size)
 		return
 	end
-
+	
 	local sz = driver.push(s.buffer, buffer_pool, data, size)
+	-- 将接收到的数据放到buffer里面
 	local rr = s.read_required
 	local rrt = type(rr)
 	if rrt == "number" then
@@ -203,7 +204,7 @@ function socket.open(addr, port)
 	return connect(id)
 end
 
--- 将操作系统的句柄交给底层的 epoll来管理，有数据来了也走 socket 那一套
+-- 将操作系统的句柄交给底层的 epoll 来管理，有数据来了也走 socket 那一套
 function socket.bind(os_fd)
 	local id = driver.bind(os_fd)
 	return connect(id)

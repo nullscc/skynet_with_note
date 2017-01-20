@@ -141,7 +141,7 @@ function command.socket(source, subcmd, fd, msg)
 			end
 		end
 		local ok, response
-		if addr == 0 then
+		if addr == 0 then		-- 如果为 0 代表是查询地址
 			local name = skynet.unpack(msg, sz)
 			local addr = register_name[name]
 			if addr then

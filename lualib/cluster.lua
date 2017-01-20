@@ -40,6 +40,7 @@ function cluster.register(name, addr)
 end
 
 function cluster.query(node, name)
+	-- 注意第5个参数为0
 	return skynet.call(clusterd, "lua", "req", node, 0, skynet.pack(name))
 end
 

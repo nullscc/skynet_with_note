@@ -93,7 +93,7 @@ end
 -- session 模式下的
 local function dispatch_by_session(self)
 	local response = self.__response
-	-- response() return session
+
 	while self.__sock do
 		local ok , session, result_ok, result_data, padding = pcall(response, self.__sock)
 		if ok and session then
@@ -314,7 +314,7 @@ local function check_connection(self)
 	end
 end
 
--- 阻塞的连接(阻塞只是一个协程)
+-- 阻塞的连接(阻塞的只是一个协程)
 local function block_connect(self, once)
 	local r = check_connection(self)
 	if r ~= nil then

@@ -5,7 +5,7 @@ local snax = require "snax"
 local cmd = {}
 local service = {}
 
-local function request(name, func, ...)
+local function request(name, func, ...)	-- 这里的 func 为 skynet.newservice
 	local ok, handle = pcall(func, ...)
 	local s = service[name]
 	assert(type(s) == "table")
@@ -154,6 +154,7 @@ local function register_local()
 			local_name = global_name
 		end
 		return waitfor(local_name, skynet.call, "SERVICE", "lua", cmd, global_name, ...)
+		-- 注意此时的 func变为 skynet.call 了， cmd为 "LAUNCH"
 	end
 
 	function cmd.GLAUNCH(...)
