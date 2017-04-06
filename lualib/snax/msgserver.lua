@@ -108,11 +108,11 @@ end
 function server.login(username, secret)
 	assert(user_online[username] == nil)
 	user_online[username] = {
-		secret = secret,
-		version = 0,
-		index = 0,
-		username = username,
-		response = {},	-- response cache
+		secret = secret,		-- 新连接上来通讯用的secret
+		version = 0,			-- 对应用户的不同连接来说是唯一的
+		index = 0,				-- 包序号
+		username = username,	-- 用户名
+		response = {},			-- response cache
 	}
 end
 
@@ -213,16 +213,18 @@ function server.start(conf)
 	local request_handler = assert(conf.request_handler)
 
 	-- u.response is a struct { return_fd , response, version, index }
+	-- 回收掉expired_number个session
+	-- index 一般来说不会大于 expired_number * 2
 	local function retire_response(u)
 		if u.index >= expired_number * 2 then
 			local max = 0
 			local response = u.response
-			for k,p in pairs(response) do
-				if p[1] == nil then
+			for k,p in pairs(response) do			-- k:session  p:response
+				if p[1] == nil then					-- 如果客户端的请求已经处理完了
 					-- request complete, check expired
-					if p[4] < expired_number then
+					if p[4] < expired_number then	-- 如果比超时数小，则清空这个session的response
 						response[k] = nil
-					else
+					else							-- 如果比超时数大，则取出比超时数大的部分当作新的index	
 						p[4] = p[4] - expired_number
 						if p[4] > max then
 							max = p[4]
@@ -239,13 +241,13 @@ function server.start(conf)
 		local session = string.unpack(">I4", message, -4)
 		message = message:sub(1,-5)
 		local p = u.response[session]
-		if p then
+		if p then	-- 处理相同session的情况
 			-- session can be reuse in the same connection
-			if p[3] == u.version then
+			if p[3] == u.version then	-- 如果是同一条连接，则不复用(将response清空)
 				local last = u.response[session]
 				u.response[session] = nil
 				p = nil
-				if last[2] == nil then
+				if last[2] == nil then	-- 表示回应还没有生成，那么就不能使用这条session
 					local error_msg = string.format("Conflict session %s", crypt.hexencode(session))
 					skynet.error(error_msg)
 					error(error_msg)
@@ -253,9 +255,11 @@ function server.start(conf)
 			end
 		end
 
-		if p == nil then
+		if p == nil then	-- 如果需要生成新的response
 			p = { fd }
 			u.response[session] = p
+
+			-- 将请求交给agent处理
 			local ok, result = pcall(conf.request_handler, u.username, message)
 			-- NOTICE: YIELD here, socket may close.
 			result = result or ""
